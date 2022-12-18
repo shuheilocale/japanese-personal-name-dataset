@@ -1,11 +1,11 @@
 import csv
-
+import os
 
 
 def load_dataset(kind='org'):
 
     man_names = {}
-    with open('japanese_personal_name_dataset/dataset/first_name_man_org.csv') as f:
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, 'dataset/first_name_man_org.csv')) as f:
         reader = csv.reader(f)
         for row in reader:
             man_names[row[0]] = {
@@ -15,7 +15,7 @@ def load_dataset(kind='org'):
 
 
     woman_names = {}
-    with open('japanese_personal_name_dataset/dataset/first_name_woman_org.csv') as f:
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, 'dataset/first_name_woman_org.csv')) as f:
         reader = csv.reader(f)
         for row in reader:
             woman_names[row[0]] = {
