@@ -2,7 +2,7 @@ import csv
 
 
 
-def load_dataset():
+def load_dataset(kind='org'):
 
     man_names = {}
     with open('japanese_personal_name_dataset/dataset/first_name_man_org.csv') as f:
