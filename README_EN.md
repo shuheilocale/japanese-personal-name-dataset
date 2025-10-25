@@ -8,7 +8,7 @@
 
 A comprehensive dataset of Japanese personal names (first names and last names) with hiragana readings, romaji (Hepburn romanization), and kanji variations.
 
-[日本語README](README.md)
+[日本語README](https://github.com/shuheilocale/japanese-personal-name-dataset/blob/main/README.md)
 
 ## Features
 
