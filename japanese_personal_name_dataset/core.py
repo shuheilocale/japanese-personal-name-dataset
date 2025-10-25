@@ -2,7 +2,7 @@
 
 import csv
 import os
-from typing import Dict, List, Tuple, Literal
+from typing import Dict, List, Tuple, Literal, Union
 
 
 NameDict = Dict[str, Dict[str, any]]
@@ -12,7 +12,7 @@ LastNameDict = Dict[str, Dict[str, any]]
 def load_dataset(
     kind: Literal['org', 'opti'] = 'org',
     include_last_names: bool = False
-) -> Tuple[NameDict, NameDict] | Tuple[NameDict, NameDict, LastNameDict]:
+) -> Union[Tuple[NameDict, NameDict], Tuple[NameDict, NameDict, LastNameDict]]:
     """
     Load Japanese personal name dataset.
 
