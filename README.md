@@ -1,6 +1,8 @@
-# Japanese Persional Name Dataset
+# Japanese Personal Name Dataset
 
 日本人の姓名データセット
+
+[English README](README_EN.md)
 
 
 ## データ仕様
@@ -59,6 +61,28 @@
 4. 女性の名（最適化） ・・・ 51、55、32、2、291、1
 
 
+
+## 使用例
+
+```python
+from japanese_personal_name_dataset import load_dataset
+
+# データセットを読み込む
+man_names, woman_names = load_dataset()
+
+# 男性の名前を確認
+print(man_names['たろう'])
+# {'en': 'tarou', 'kanji': ['太郎', '太朗', '大郎', ...]}
+
+# 女性の名前を確認
+print(woman_names['はなこ'])
+# {'en': 'hanako', 'kanji': ['花子', '華子', ...]}
+
+# ランダムな名前を取得
+import random
+random_reading = random.choice(list(man_names.keys()))
+print(f"{random_reading}: {man_names[random_reading]}")
+```
 
 ## 参考
 - [名字由来net](https://myoji-yurai.net/prefectureRanking.htm)
