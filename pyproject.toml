@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "japanese-personal-name-dataset"
+version = "0.1.0"
+description = "A comprehensive dataset of Japanese personal names (first names and last names) with hiragana readings, romaji, and kanji variations"
+readme = "README_EN.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "shuheilocale", email = "xxx@gmail.com"}
+]
+keywords = ["japanese", "names", "dataset", "hiragana", "kanji", "romaji"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Text Processing :: Linguistic",
+    "Natural Language :: Japanese",
+]
+
+[project.urls]
+Homepage = "https://github.com/shuheilocale/japanese-personal-name-dataset"
+Repository = "https://github.com/shuheilocale/japanese-personal-name-dataset"
+Issues = "https://github.com/shuheilocale/japanese-personal-name-dataset/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["japanese_personal_name_dataset"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "japanese_personal_name_dataset/",
+    "tests/",
+    "README.md",
+    "README_EN.md",
+    "LICENSE",
+    "CLAUDE.md",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --strict-markers"
+
+[tool.coverage.run]
+source = ["japanese_personal_name_dataset"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]

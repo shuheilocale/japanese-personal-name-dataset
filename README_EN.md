@@ -16,6 +16,12 @@ A comprehensive dataset of Japanese personal names (first names and last names) 
 ## Installation
 
 ```bash
+pip install japanese-personal-name-dataset
+```
+
+Or install from source:
+
+```bash
 git clone https://github.com/shuheilocale/japanese-personal-name-dataset.git
 cd japanese-personal-name-dataset
 pip install -e .
@@ -62,27 +68,58 @@ Example:
 
 ## Usage
 
+### Basic Usage
+
 ```python
 from japanese_personal_name_dataset import load_dataset
 
-# Load the dataset
+# Load the dataset (default: full version)
 man_names, woman_names = load_dataset()
 
 # Access male names
 print(man_names['たろう'])
-# Output: {'en': 'tarou', 'kanji': ['太郎', '太朗', '大郎', ...]}
+# Output: {'en': 'tarou', 'kanji': ['多朗', '多郎', '太朗', '太郎', '大郎']}
 
 # Access female names
 print(woman_names['はなこ'])
 # Output: {'en': 'hanako', 'kanji': ['花子', '華子', ...]}
+```
 
-# Get a random name
+### Load Optimized Dataset (Popular Names Only)
+
+```python
+# Load only popular names
+man_names, woman_names = load_dataset(kind='opti')
+print(f"Male names: {len(man_names)} types")    # 703 types
+print(f"Female names: {len(woman_names)} types")  # 241 types
+```
+
+### Include Last Names
+
+```python
+# Load with last names
+man_names, woman_names, last_names = load_dataset(include_last_names=True)
+
+# Access last name data
+print(last_names['佐藤'])
+# Output: {'reading': 'さとう', 'en': 'satou', 'count': 1887000}
+```
+
+### Generate Random Names
+
+```python
 import random
-random_reading = random.choice(list(woman_names.keys()))
-name_data = woman_names[random_reading]
-print(f"Reading: {random_reading}")
-print(f"Romaji: {name_data['en']}")
-print(f"Kanji options: {', '.join(name_data['kanji'][:5])}")
+
+# Generate random male name
+reading = random.choice(list(man_names.keys()))
+kanji = random.choice(man_names[reading]['kanji'])
+print(f"{kanji} ({reading})")
+
+# Generate random full name
+last_kanji = random.choice(list(last_names.keys()))
+first_reading = random.choice(list(woman_names.keys()))
+first_kanji = random.choice(woman_names[first_reading]['kanji'])
+print(f"{last_kanji} {first_kanji}")
 ```
 
 ## Use Cases
