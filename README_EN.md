@@ -16,6 +16,12 @@ A comprehensive dataset of Japanese personal names (first names and last names) 
 ## Installation
 
 ```bash
+pip install japanese-personal-name-dataset
+```
+
+Or install from source:
+
+```bash
 git clone https://github.com/shuheilocale/japanese-personal-name-dataset.git
 cd japanese-personal-name-dataset
 pip install -e .
@@ -62,27 +68,81 @@ Example:
 
 ## Usage
 
+### Basic Usage
+
 ```python
 from japanese_personal_name_dataset import load_dataset
 
-# Load the dataset
+# Load the dataset (default: full version)
 man_names, woman_names = load_dataset()
 
 # Access male names
 print(man_names['たろう'])
-# Output: {'en': 'tarou', 'kanji': ['太郎', '太朗', '大郎', ...]}
+# Output: {'en': 'tarou', 'kanji': ['多朗', '多郎', '太朗', '太郎', '大郎']}
 
 # Access female names
 print(woman_names['はなこ'])
 # Output: {'en': 'hanako', 'kanji': ['花子', '華子', ...]}
+```
 
-# Get a random name
-import random
-random_reading = random.choice(list(woman_names.keys()))
-name_data = woman_names[random_reading]
-print(f"Reading: {random_reading}")
-print(f"Romaji: {name_data['en']}")
-print(f"Kanji options: {', '.join(name_data['kanji'][:5])}")
+### Load Optimized Dataset (Popular Names Only)
+
+```python
+# Load only popular names
+man_names, woman_names = load_dataset(kind='opti')
+print(f"Male names: {len(man_names)} types")    # 703 types
+print(f"Female names: {len(woman_names)} types")  # 241 types
+```
+
+### Include Last Names
+
+```python
+# Load with last names
+man_names, woman_names, last_names = load_dataset(include_last_names=True)
+
+# Access last name data
+print(last_names['佐藤'])
+# Output: {'reading': 'さとう', 'en': 'satou', 'count': 1887000}
+```
+
+### Using Utility Functions
+
+```python
+from japanese_personal_name_dataset import (
+    generate_random_name,
+    generate_random_full_name,
+    search_by_reading,
+    search_by_kanji,
+    get_last_names,
+    is_valid_name,
+)
+
+# Generate random name
+name = generate_random_name(gender='male')
+print(name)  # Example: Taro
+
+# Generate random full name with reading
+full_name, reading = generate_random_full_name(gender='female', return_reading=True)
+print(f"{full_name} ({reading})")  # Example: Sato Hanako (satou hanako)
+
+# Search by reading (partial match / LIKE search)
+results = search_by_reading('kou', partial=True, gender='male')
+for r in results[:3]:
+    print(f"{r['reading']} ({r['romaji']}): {', '.join(r['kanji'][:3])}")
+# Example: kouji (kouji): Koji, Takaji, Yukiharu
+
+# Search by kanji (names containing '子')
+results = search_by_kanji('子', partial=True, gender='female')
+print(f"Names containing '子': {len(results)} results")
+
+# Get top 10 most common last names
+top_10 = get_last_names(limit=10)
+for i, name in enumerate(top_10, 1):
+    print(f"{i}. {name['kanji']} ({name['reading']}) - {name['count']:,} people")
+
+# Validate name
+if is_valid_name('太郎', 'たろう'):
+    print("太郎 (tarou) is a valid combination")
 ```
 
 ## Use Cases
