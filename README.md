@@ -107,21 +107,44 @@ print(last_names['佐藤'])
 # {'reading': 'さとう', 'en': 'satou', 'count': 1887000}
 ```
 
-### ランダムな名前を生成
+### ユーティリティ関数を使う
 
 ```python
-import random
+from japanese_personal_name_dataset import (
+    generate_random_name,
+    generate_random_full_name,
+    search_by_reading,
+    search_by_kanji,
+    get_last_names,
+    is_valid_name,
+)
 
-# ランダムな男性の名前
-reading = random.choice(list(man_names.keys()))
-kanji = random.choice(man_names[reading]['kanji'])
-print(f"{kanji}（{reading}）")
+# ランダムな名前を生成
+name = generate_random_name(gender='male')
+print(name)  # 例: 太郎
 
-# ランダムなフルネーム
-last_kanji = random.choice(list(last_names.keys()))
-first_reading = random.choice(list(woman_names.keys()))
-first_kanji = random.choice(woman_names[first_reading]['kanji'])
-print(f"{last_kanji} {first_kanji}")
+# ランダムなフルネームを生成（読み仮名付き）
+full_name, reading = generate_random_full_name(gender='female', return_reading=True)
+print(f"{full_name} ({reading})")  # 例: 佐藤 花子 (さとう はなこ)
+
+# 読み仮名で検索（部分一致）
+results = search_by_reading('こう', partial=True, gender='male')
+for r in results[:3]:
+    print(f"{r['reading']} ({r['romaji']}): {', '.join(r['kanji'][:3])}")
+# 例: こうじ (kouji): 浩二, 孝二, 幸治
+
+# 漢字で検索（「子」を含む名前）
+results = search_by_kanji('子', partial=True, gender='female')
+print(f"「子」を含む名前: {len(results)}件")
+
+# 人気の姓トップ10
+top_10 = get_last_names(limit=10)
+for i, name in enumerate(top_10, 1):
+    print(f"{i}. {name['kanji']} ({name['reading']}) - {name['count']:,}人")
+
+# 名前の妥当性チェック
+if is_valid_name('太郎', 'たろう'):
+    print("太郎（たろう）は正しい組み合わせです")
 ```
 
 ## 参考

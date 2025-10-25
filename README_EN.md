@@ -105,21 +105,44 @@ print(last_names['佐藤'])
 # Output: {'reading': 'さとう', 'en': 'satou', 'count': 1887000}
 ```
 
-### Generate Random Names
+### Using Utility Functions
 
 ```python
-import random
+from japanese_personal_name_dataset import (
+    generate_random_name,
+    generate_random_full_name,
+    search_by_reading,
+    search_by_kanji,
+    get_last_names,
+    is_valid_name,
+)
 
-# Generate random male name
-reading = random.choice(list(man_names.keys()))
-kanji = random.choice(man_names[reading]['kanji'])
-print(f"{kanji} ({reading})")
+# Generate random name
+name = generate_random_name(gender='male')
+print(name)  # Example: Taro
 
-# Generate random full name
-last_kanji = random.choice(list(last_names.keys()))
-first_reading = random.choice(list(woman_names.keys()))
-first_kanji = random.choice(woman_names[first_reading]['kanji'])
-print(f"{last_kanji} {first_kanji}")
+# Generate random full name with reading
+full_name, reading = generate_random_full_name(gender='female', return_reading=True)
+print(f"{full_name} ({reading})")  # Example: Sato Hanako (satou hanako)
+
+# Search by reading (partial match / LIKE search)
+results = search_by_reading('kou', partial=True, gender='male')
+for r in results[:3]:
+    print(f"{r['reading']} ({r['romaji']}): {', '.join(r['kanji'][:3])}")
+# Example: kouji (kouji): Koji, Takaji, Yukiharu
+
+# Search by kanji (names containing '子')
+results = search_by_kanji('子', partial=True, gender='female')
+print(f"Names containing '子': {len(results)} results")
+
+# Get top 10 most common last names
+top_10 = get_last_names(limit=10)
+for i, name in enumerate(top_10, 1):
+    print(f"{i}. {name['kanji']} ({name['reading']}) - {name['count']:,} people")
+
+# Validate name
+if is_valid_name('太郎', 'たろう'):
+    print("太郎 (tarou) is a valid combination")
 ```
 
 ## Use Cases
