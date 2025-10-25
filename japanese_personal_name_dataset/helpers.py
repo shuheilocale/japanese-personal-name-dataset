@@ -1,7 +1,7 @@
 """Helper utilities for Japanese personal name dataset."""
 
 import random
-from typing import List, Dict, Literal, Optional, Tuple
+from typing import List, Dict, Literal, Optional, Tuple, Union
 from .core import load_dataset, NameDict, LastNameDict
 
 
@@ -23,7 +23,7 @@ def generate_random_name(
     gender: Literal['male', 'female'] = 'male',
     kind: Literal['org', 'opti'] = 'org',
     return_reading: bool = False
-) -> str | Tuple[str, str]:
+) -> Union[str, Tuple[str, str]]:
     """
     Generate a random Japanese first name.
 
@@ -59,7 +59,7 @@ def generate_random_full_name(
     gender: Literal['male', 'female'] = 'female',
     kind: Literal['org', 'opti'] = 'org',
     return_reading: bool = False
-) -> str | Tuple[str, str]:
+) -> Union[str, Tuple[str, str]]:
     """
     Generate a random Japanese full name (last name + first name).
 
