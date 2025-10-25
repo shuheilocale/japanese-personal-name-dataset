@@ -1,5 +1,11 @@
 # Japanese Personal Name Dataset
 
+[![Tests](https://github.com/shuheilocale/japanese-personal-name-dataset/actions/workflows/test.yml/badge.svg)](https://github.com/shuheilocale/japanese-personal-name-dataset/actions/workflows/test.yml)
+[![PyPI version](https://badge.fury.io/py/japanese-personal-name-dataset.svg)](https://badge.fury.io/py/japanese-personal-name-dataset)
+[![Python Versions](https://img.shields.io/pypi/pyversions/japanese-personal-name-dataset.svg)](https://pypi.org/project/japanese-personal-name-dataset/)
+[![codecov](https://codecov.io/gh/shuheilocale/japanese-personal-name-dataset/branch/main/graph/badge.svg)](https://codecov.io/gh/shuheilocale/japanese-personal-name-dataset)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A comprehensive dataset of Japanese personal names (first names and last names) with hiragana readings, romaji (Hepburn romanization), and kanji variations.
 
 [日本語README](README.md)
