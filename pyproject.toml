@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "japanese-personal-name-dataset"
-version = "0.1.0"
+version = "0.1.1"
 description = "A comprehensive dataset of Japanese personal names (first names and last names) with hiragana readings, romaji, and kanji variations"
 readme = "README_EN.md"
 requires-python = ">=3.8"
