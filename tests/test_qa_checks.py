@@ -71,20 +71,25 @@ class TestValidateScriptOutput:
         """validate.py のファイル欠落エラーが line == 0 の Finding として
         'ERROR   filename: message' 形式で出力されることを検証（`:0` を含まない）。
         """
+        import os
         import subprocess
+        # リポジトリルートを test ファイルの位置から相対的に解決
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+        validate_script = os.path.join(
+            repo_root, ".claude", "skills", "validate-dataset", "scripts", "validate.py"
+        )
         # 空のディレクトリで validate.py を実行
         result = subprocess.run(
-            ["python3", "./.claude/skills/validate-dataset/scripts/validate.py", str(tmp_path)],
+            ["python3", validate_script, str(tmp_path)],
             capture_output=True,
             text=True,
-            cwd="/Users/shuhei/99_private/japanese-personal-name-dataset/.claude/worktrees/qa-foundation"
+            cwd=repo_root
         )
         # ファイル欠落エラーが出力される
         assert "ファイルが存在しません" in result.stderr or "ファイルが存在しません" in result.stdout
         # 出力に :0 が含まれていないことを確認（行番号なし形式であることを検証）
         output = result.stderr + result.stdout
         # "first_name_man_org.csv:" で始まり、その直後が `:0:` ではなく `: ` であることを確認
-        import re
         lines_with_error = [l for l in output.split('\n') if 'first_name_man_org.csv:' in l]
         assert lines_with_error, "ファイル欠落エラーが見つかりません"
         # `:0:` を含まないことを確認
