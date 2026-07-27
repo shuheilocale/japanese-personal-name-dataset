@@ -73,14 +73,16 @@ class TestValidateScriptOutput:
         """
         import os
         import subprocess
+        import sys
         # リポジトリルートを test ファイルの位置から相対的に解決
         repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
         validate_script = os.path.join(
             repo_root, ".claude", "skills", "validate-dataset", "scripts", "validate.py"
         )
-        # 空のディレクトリで validate.py を実行
+        # 空のディレクトリで validate.py を実行（Windows でも解決できるよう
+        # "python3" ではなく現在の Python 実行ファイルを使う）
         result = subprocess.run(
-            ["python3", validate_script, str(tmp_path)],
+            [sys.executable, validate_script, str(tmp_path)],
             capture_output=True,
             text=True,
             cwd=repo_root
