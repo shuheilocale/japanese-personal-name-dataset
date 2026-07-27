@@ -163,3 +163,6 @@ cython_debug/
 #.idea/
 
 .DS_Store
+
+# QA レビューの一時作業ファイル（バッチ・サブエージェント結果）
+qa/work/
