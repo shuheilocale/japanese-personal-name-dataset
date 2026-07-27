@@ -76,6 +76,10 @@ def apply(findings_path, dataset_dir, qa_dir, report_path=None, dry_run=False):
         if d["status"] != "approved":
             continue
         fname = d["file"]
+        action = d["proposed_fix"]["action"]
+        value = d["proposed_fix"].get("value", "")
+        print("適用予定: id=%s action=%s value=%s file=%s"
+              % (d["id"], action, value or "(なし)", fname))
         if fname not in file_lines:
             file_lines[fname] = _read_lines(os.path.join(dataset_dir, fname))
         new_lines, moved, ok = _apply_one(file_lines[fname], d)

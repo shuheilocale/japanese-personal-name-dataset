@@ -114,6 +114,33 @@ class TestApply:
         assert before == after
         assert findings_io.load_findings(fp)[0]["status"] == "approved"
 
+    def test_prints_planned_application_breakdown(self, tmp_path, capsys):
+        # dry-run・通常適用のどちらでも、適用予定の内訳（id/action/value/file）
+        # を1件ずつ日本語で印字する。
+        ds = _write_dataset(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        f = _finding("first_name_man_org.csv", "かおる,kaoru,薫", "fix_romaji",
+                     "kaworu", check="romaji_reading_mismatch")
+        findings_io.append_findings(fp, [f])
+        apply_findings.apply(fp, ds, str(tmp_path / "qa"), dry_run=True)
+        out = capsys.readouterr().out
+        assert "適用予定" in out
+        assert f["id"] in out
+        assert "fix_romaji" in out
+        assert "kaworu" in out
+        assert "first_name_man_org.csv" in out
+
+    def test_prints_planned_application_breakdown_on_real_apply(self, tmp_path, capsys):
+        ds = _write_dataset(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        f = _finding("first_name_man_org.csv", "ああす,asu,亜明日", "remove_row", "")
+        findings_io.append_findings(fp, [f])
+        apply_findings.apply(fp, ds, str(tmp_path / "qa"))
+        out = capsys.readouterr().out
+        assert "適用予定" in out
+        assert f["id"] in out
+        assert "remove_row" in out
+
     def test_from_report_promotes_checked(self, tmp_path):
         ds = _write_dataset(tmp_path)
         fp = str(tmp_path / "f.jsonl")
