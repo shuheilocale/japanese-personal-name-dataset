@@ -45,6 +45,32 @@ class TestValidateFinding:
         f["proposed_fix"] = {"action": "delete_everything", "value": ""}
         assert findings_io.validate_finding(f)
 
+    def test_file_path_traversal_rejected(self):
+        f = _valid_finding()
+        f["file"] = "../x.csv"
+        assert findings_io.validate_finding(f)
+
+    def test_file_not_in_whitelist_rejected(self):
+        f = _valid_finding()
+        f["file"] = "not_a_real_file.csv"
+        assert findings_io.validate_finding(f)
+
+    def test_move_to_file_target_must_be_first_name_file(self):
+        f = _valid_finding()
+        f["proposed_fix"] = {"action": "move_to_file", "value": "last_name_org.csv"}
+        assert findings_io.validate_finding(f)
+
+    def test_move_to_file_path_traversal_rejected(self):
+        f = _valid_finding()
+        f["proposed_fix"] = {"action": "move_to_file", "value": "../x.csv"}
+        assert findings_io.validate_finding(f)
+
+    def test_move_to_file_to_valid_first_name_file_ok(self):
+        f = _valid_finding()
+        f["proposed_fix"] = {"action": "move_to_file",
+                             "value": "first_name_woman_org.csv"}
+        assert findings_io.validate_finding(f) == []
+
 
 class TestJsonlRoundtrip:
     def test_append_and_load(self, tmp_path):
@@ -70,6 +96,15 @@ class TestJsonlRoundtrip:
         findings_io.save_findings(p, [f2])
         assert findings_io.load_findings(p)[0]["status"] == "approved"
 
+    def test_append_and_save_use_lf_only(self, tmp_path):
+        p = str(tmp_path / "f.jsonl")
+        f = _valid_finding()
+        findings_io.append_findings(p, [f])
+        findings_io.save_findings(p, [f, f])
+        raw = open(p, "rb").read()
+        assert b"\r\n" not in raw
+        assert raw.count(b"\n") == 2
+
 
 class TestVerifiedCache:
     def test_hash_is_stable_and_content_sensitive(self):
@@ -86,4 +121,12 @@ class TestVerifiedCache:
         p = str(tmp_path / "v.json")
         findings_io.save_verified(p, {"abc": {"file": "a.csv", "reading": "あい",
                                               "verified_at": "2026-07-27"}})
+        assert "abc" in findings_io.load_verified(p)
+
+    def test_save_verified_uses_lf_only(self, tmp_path):
+        p = str(tmp_path / "v.json")
+        findings_io.save_verified(p, {"abc": {"file": "a.csv", "reading": "あい",
+                                              "verified_at": "2026-07-27"}})
+        raw = open(p, "rb").read()
+        assert b"\r\n" not in raw
         assert "abc" in findings_io.load_verified(p)
