@@ -20,15 +20,15 @@ class TestLoadDataset:
         assert len(woman_names) > 0
 
         # Check expected counts (from README)
-        assert len(man_names) == 5678
-        assert len(woman_names) == 3346
+        assert len(man_names) == 5675
+        assert len(woman_names) == 3344
 
     def test_load_dataset_org(self):
         """Test loading original (full) dataset."""
         man_names, woman_names = load_dataset(kind='org')
 
-        assert len(man_names) == 5678
-        assert len(woman_names) == 3346
+        assert len(man_names) == 5675
+        assert len(woman_names) == 3344
 
     def test_load_dataset_opti(self):
         """Test loading optimized (popular names) dataset."""
