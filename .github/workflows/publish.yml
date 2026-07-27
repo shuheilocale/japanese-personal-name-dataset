@@ -8,6 +8,7 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: pypi  # PyPI の Trusted Publisher 設定と一致させること
     permissions:
       id-token: write  # Required for trusted publishing
 
@@ -37,5 +38,3 @@ jobs:
 
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        password: ${{ secrets.PYPI_API_TOKEN }}
