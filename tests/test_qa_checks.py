@@ -95,3 +95,62 @@ class TestValidateScriptOutput:
         # `:0:` を含まないことを確認
         for line in lines_with_error:
             assert ":0:" not in line, f"エラー形式が不正（:0: を含む）: {line}"
+
+
+class TestRomajiReadingCheck:
+    def test_match_passes(self):
+        rows = [["さとう", "satou", "佐藤"], ["いっしゅう", "isshu", "一秀"]]
+        assert checks.check_romaji_reading("f.csv", rows, "first") == []
+
+    def test_mismatch_flagged(self):
+        fs = checks.check_romaji_reading("f.csv", [["さとう", "satoh", "佐藤"]], "first")
+        assert len(fs) == 1
+        assert fs[0].check == "romaji_reading_mismatch"
+        assert fs[0].severity == "error"
+
+    def test_last_name_columns(self):
+        rows = [["佐藤", "1887000", "さとう", "satou"]]
+        assert checks.check_romaji_reading("l.csv", rows, "last") == []
+        rows = [["佐藤", "1887000", "さとう", "sazou"]]
+        assert len(checks.check_romaji_reading("l.csv", rows, "last")) == 1
+
+    def test_untokenizable_reading_flagged(self):
+        fs = checks.check_romaji_reading("f.csv", [["あゃ", "aya", "彩"]], "first")
+        assert len(fs) == 1
+
+    def test_short_or_malformed_rows_skipped(self):
+        # 列数不足は check_first_name_rows が報告するのでここでは黙ってスキップ
+        assert checks.check_romaji_reading("f.csv", [[], ["あい"]], "first") == []
+
+
+class TestCrossFileChecks:
+    def test_opti_subset_ok(self):
+        org = [["あい", "ai", "藍", "愛"]]
+        opti = [["あい", "ai", "藍"]]
+        assert checks.check_opti_subset("o.csv", opti, org) == []
+
+    def test_opti_missing_reading(self):
+        fs = checks.check_opti_subset("o.csv", [["かい", "kai", "快"]], [["あい", "ai", "藍"]])
+        assert [f for f in fs if f.severity == "error"]
+
+    def test_opti_extra_kanji_is_warning(self):
+        org = [["あい", "ai", "藍"]]
+        opti = [["あい", "ai", "藍", "愛"]]
+        fs = checks.check_opti_subset("o.csv", opti, org)
+        assert [f for f in fs if f.severity == "warning"]
+
+    def test_gender_overlap(self):
+        man = [["かおる", "kaoru", "薫"]]
+        woman = [["かおる", "kaolu", "香"]]
+        fs = checks.check_gender_overlap(man, woman)
+        assert [f for f in fs if f.severity == "warning"]  # ローマ字食い違い
+        assert [f for f in fs if f.severity == "info"]     # 共通読みサマリ
+
+
+class TestStyleStats:
+    def test_stats(self):
+        rows = [["さとう", "satou", "佐"], ["いっしゅう", "isshu", "一"], ["あい", "ai", "藍"]]
+        stats = checks.romaji_style_stats(rows, "first")
+        assert stats["wapuro"] == 1
+        assert stats["shortened"] == 1
+        assert stats["neutral"] == 1

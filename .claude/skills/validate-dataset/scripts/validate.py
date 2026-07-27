@@ -40,6 +40,7 @@ def main():
         return 1
 
     findings = []
+    all_rows = {}
     for filename in FIRST_NAME_FILES + LAST_NAME_FILES:
         path = os.path.join(dataset_dir, filename)
         if not os.path.isfile(path):
@@ -47,14 +48,36 @@ def main():
                 filename, 0, checks.CHECK_FORMAT, "error", "ファイルが存在しません"))
             continue
         rows = checks.load_rows(path)
+        all_rows[filename] = rows
+        kind = "last" if filename in LAST_NAME_FILES else "first"
         if filename in LAST_NAME_FILES:
             findings.extend(checks.check_last_name_rows(filename, rows))
         else:
             findings.extend(checks.check_first_name_rows(filename, rows))
+        findings.extend(checks.check_romaji_reading(filename, rows, kind))
         print("%s: %d 行" % (filename, sum(1 for r in rows if r)))
+
+    for opti, org in [
+        ("first_name_man_opti.csv", "first_name_man_org.csv"),
+        ("first_name_woman_opti.csv", "first_name_woman_org.csv"),
+    ]:
+        if opti in all_rows and org in all_rows:
+            findings.extend(checks.check_opti_subset(opti, all_rows[opti], all_rows[org]))
+    if "first_name_man_org.csv" in all_rows and "first_name_woman_org.csv" in all_rows:
+        findings.extend(checks.check_gender_overlap(
+            all_rows["first_name_man_org.csv"], all_rows["first_name_woman_org.csv"]))
+
+    print("\nローマ字表記方式の分布:")
+    for filename in FIRST_NAME_FILES + LAST_NAME_FILES:
+        if filename not in all_rows:
+            continue
+        kind = "last" if filename in LAST_NAME_FILES else "first"
+        stats = checks.romaji_style_stats(all_rows[filename], kind)
+        print("  %s: %s" % (filename, " ".join("%s=%d" % kv for kv in sorted(stats.items()))))
 
     errors = [f for f in findings if f.severity == "error"]
     warnings = [f for f in findings if f.severity == "warning"]
+    infos = [f for f in findings if f.severity == "info"]
     print()
     for f in errors:
         if f.line == 0:
@@ -66,7 +89,12 @@ def main():
             print("WARNING %s: %s" % (f.file, f.message))
         else:
             print("WARNING %s:%d: %s" % (f.file, f.line, f.message))
-    print("\n結果: エラー %d 件 / 警告 %d 件" % (len(errors), len(warnings)))
+    for f in infos:
+        if f.line == 0:
+            print("INFO    %s: %s" % (f.file, f.message))
+        else:
+            print("INFO    %s:%d: %s" % (f.file, f.line, f.message))
+    print("\n結果: エラー %d 件 / 警告 %d 件 / 情報 %d 件" % (len(errors), len(warnings), len(infos)))
     return 1 if errors else 0
 
 
