@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import json,sys; d=json.load(sys.stdin); p=d.get('tool_input',{}).get('file_path',''); (sys.stderr.write('dataset CSV は保護されています。データ更新は明示的にユーザーへ確認してください。\\n'), sys.exit(2)) if ('/dataset/' in p and p.endswith('.csv')) else sys.exit(0)\"",
+            "statusMessage": "dataset CSV 保護チェック"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r \".tool_input.file_path // empty\" | { read -r f; [ -z \"$f\" ] && exit 0; case \"$f\" in *.py) out=$(uvx vermin -t=3.8- --violations --eval-annotations --feature union-types --backport typing --no-tips \"$f\" 2>&1) || { printf \"%s\\n\" \"Python 3.8 互換性違反を検出:\" \"$out\" >&2; exit 2; }; esac; }",
+            "timeout": 60,
+            "statusMessage": "Python 3.8 互換性チェック (vermin)"
+          }
+        ]
+      }
+    ]
+  }
+}

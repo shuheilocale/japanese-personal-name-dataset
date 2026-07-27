@@ -1,3 +1,6 @@
+# Claude Code (個人設定のみ除外。settings.json/skills/agents はコミット対象)
+.claude/settings.local.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
