@@ -86,4 +86,10 @@ os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, 'dataset/...
 - **PreToolUse**: `dataset/` 配下の CSV への Edit/Write をブロック（データセット保護）。データ修正が必要な場合はユーザーの明示的な承認を得ること。
 - **PostToolUse**: `.py` ファイル編集後に vermin で Python 3.8 互換性を自動チェック（`X | Y` 型ヒント等の 3.9+ 構文を検出）。
 
-その他: dataset CSV の検証は `/validate-dataset` スキル、リリース前の互換性レビューは `py38-compat-reviewer` サブエージェントを使用できます。
+### データ品質保証（QA基盤）
+
+- `/validate-dataset`: 決定的チェック（形式・重複・読み⇔ローマ字照合・クロスファイル整合性）
+- `/qa-review`: LLM 品質レビュー（漢字⇔読みの妥当性・人名らしさ・男女配置）。疑義は `qa/findings/*.jsonl` に、検証済みは `qa/verified.json` に記録
+- `/qa-apply`: 承認済み findings の一括適用（ユーザーの明示承認必須）
+- 設計書: `docs/superpowers/specs/2026-07-27-qa-foundation-design.md`
+- リリース前の互換性レビューは `py38-compat-reviewer` サブエージェントを使用
