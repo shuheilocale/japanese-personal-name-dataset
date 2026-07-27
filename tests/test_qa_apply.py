@@ -141,6 +141,68 @@ class TestApply:
         assert f["id"] in out
         assert "remove_row" in out
 
+    def test_two_remove_kanji_on_same_row_both_applied(self, tmp_path):
+        # 同一行の漢字リストから2件の remove_kanji が承認された場合、
+        # 1件目適用後の行を土台に2件目も適用され、両漢字とも消える。
+        ds = _write_dataset(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [
+            _finding("first_name_man_org.csv", "あい,ai,藍,愛", "remove_kanji", "藍",
+                     check="kanji_reading_mismatch"),
+            _finding("first_name_man_org.csv", "あい,ai,藍,愛", "remove_kanji", "愛",
+                     check="kanji_reading_mismatch"),
+        ])
+        result = apply_findings.apply(fp, ds, str(tmp_path / "qa"))
+        assert result["applied"] == 2
+        assert result["skipped"] == []
+        content = open(os.path.join(ds, "first_name_man_org.csv"),
+                       encoding="utf-8").read()
+        assert "藍" not in content
+        assert "愛" not in content
+        assert "あい,ai\n" in content
+        statuses = [d["status"] for d in findings_io.load_findings(fp)]
+        assert statuses == ["applied", "applied"]
+
+    def test_remove_kanji_then_fix_romaji_on_same_row_both_applied(self, tmp_path):
+        # 同一行に対する remove_kanji と fix_romaji の組み合わせも、
+        # 進化した行を追跡して両方適用される。
+        ds = _write_dataset(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [
+            _finding("first_name_man_org.csv", "あい,ai,藍,愛", "remove_kanji", "愛",
+                     check="kanji_reading_mismatch"),
+            _finding("first_name_man_org.csv", "あい,ai,藍,愛", "fix_romaji", "ai2",
+                     check="romaji_reading_mismatch"),
+        ])
+        result = apply_findings.apply(fp, ds, str(tmp_path / "qa"))
+        assert result["applied"] == 2
+        content = open(os.path.join(ds, "first_name_man_org.csv"),
+                       encoding="utf-8").read()
+        assert "愛" not in content
+        assert "あい,ai2,藍\n" in content
+        statuses = [d["status"] for d in findings_io.load_findings(fp)]
+        assert statuses == ["applied", "applied"]
+
+    def test_remove_row_then_other_finding_on_same_row_is_skipped(self, tmp_path):
+        # remove_row が先に適用されて行が消えた後、同じ元の行を対象とする
+        # 別の finding は「行が見つかりません」でスキップされ approved のまま残る。
+        ds = _write_dataset(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [
+            _finding("first_name_man_org.csv", "あい,ai,藍,愛", "remove_row", "",
+                     check="not_a_name"),
+            _finding("first_name_man_org.csv", "あい,ai,藍,愛", "remove_kanji", "愛",
+                     check="kanji_reading_mismatch"),
+        ])
+        result = apply_findings.apply(fp, ds, str(tmp_path / "qa"))
+        assert result["applied"] == 1
+        assert len(result["skipped"]) == 1
+        content = open(os.path.join(ds, "first_name_man_org.csv"),
+                       encoding="utf-8").read()
+        assert "あい" not in content
+        statuses = [d["status"] for d in findings_io.load_findings(fp)]
+        assert statuses == ["applied", "approved"]
+
     def test_from_report_promotes_checked(self, tmp_path):
         ds = _write_dataset(tmp_path)
         fp = str(tmp_path / "f.jsonl")

@@ -30,20 +30,24 @@ def _write_lines(path, lines):
         f.write("\n".join(lines) + ("\n" if lines else ""))
 
 
-def _apply_one(lines, finding):
-    # type: (list, dict) -> tuple
-    """1件適用し (新lines, 移動行 or None, 成功か) を返す。"""
-    entry = finding["entry"]
+def _apply_one(lines, finding, current_entry):
+    # type: (list, dict, str) -> tuple
+    """1件適用し (新lines, 移動行 or None, 成功か, 適用後の行 or None) を返す。
+
+    current_entry は元の finding["entry"] そのもの、または同一行に対する
+    それより前の承認済み finding 適用後の行（進化形）。remove_row /
+    move_to_file 適用後は行が消えるため呼び出し側は None を渡す。
+    """
     action = finding["proposed_fix"]["action"]
     value = finding["proposed_fix"].get("value", "")
-    if entry not in lines:
-        return lines, None, False
-    idx = lines.index(entry)
+    if current_entry is None or current_entry not in lines:
+        return lines, None, False, current_entry
+    idx = lines.index(current_entry)
     if action == "remove_row":
-        return lines[:idx] + lines[idx + 1:], None, True
+        return lines[:idx] + lines[idx + 1:], None, True, None
     if action == "move_to_file":
-        return lines[:idx] + lines[idx + 1:], entry, True
-    cols = entry.split(",")
+        return lines[:idx] + lines[idx + 1:], current_entry, True, None
+    cols = current_entry.split(",")
     if action == "remove_kanji":
         cols = [cols[0], cols[1]] + [k for k in cols[2:] if k != value]
     elif action == "fix_romaji":
@@ -51,9 +55,10 @@ def _apply_one(lines, finding):
     elif action == "fix_reading":
         cols[0] = value
     elif action == "none":
-        return lines, None, True
-    lines[idx] = ",".join(cols)
-    return lines, None, True
+        return lines, None, True, current_entry
+    new_entry = ",".join(cols)
+    lines[idx] = new_entry
+    return lines, None, True, new_entry
 
 
 def apply(findings_path, dataset_dir, qa_dir, report_path=None, dry_run=False):
@@ -71,6 +76,9 @@ def apply(findings_path, dataset_dir, qa_dir, report_path=None, dry_run=False):
     applied = 0
     skipped = []
     file_lines = {}  # type: dict
+    # (file, 元entry) -> 現在の行（同一行への複数 findings 適用を追跡）。
+    # remove_row / move_to_file 適用後は行が消えるため None を保持する。
+    evolution = {}  # type: dict
     moves = []  # (target_file, raw_line)
     for d in findings:
         if d["status"] != "approved":
@@ -82,12 +90,16 @@ def apply(findings_path, dataset_dir, qa_dir, report_path=None, dry_run=False):
               % (d["id"], action, value or "(なし)", fname))
         if fname not in file_lines:
             file_lines[fname] = _read_lines(os.path.join(dataset_dir, fname))
-        new_lines, moved, ok = _apply_one(file_lines[fname], d)
+        key = (fname, d["entry"])
+        current_entry = evolution.get(key, d["entry"])
+        new_lines, moved, ok, new_entry = _apply_one(
+            file_lines[fname], d, current_entry)
         if not ok:
             skipped.append(d["id"])
             print("スキップ（行が見つかりません）: %s" % d["id"])
             continue
         file_lines[fname] = new_lines
+        evolution[key] = new_entry
         if moved is not None:
             moves.append((d["proposed_fix"]["value"], moved))
         d["status"] = "applied"
