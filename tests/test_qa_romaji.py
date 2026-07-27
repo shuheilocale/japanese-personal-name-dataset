@@ -46,3 +46,25 @@ class TestCandidatesBasic:
         c = romaji.romaji_candidates("けんいち")
         assert "kenichi" in c
         assert "ken'ichi" in c
+
+
+class TestLongVowelsAndStyle:
+    def test_long_vowel_variants(self):
+        c = romaji.romaji_candidates("さとう")
+        assert "satou" in c and "sato" in c
+        c = romaji.romaji_candidates("ああす")
+        assert "aasu" in c and "asu" in c
+        c = romaji.romaji_candidates("いっしゅう")
+        assert "isshuu" in c and "isshu" in c
+
+    def test_mixed_style_accepted(self):
+        # 実データ: あいいちろう,aichirou（いい は省略、ろう は保持）
+        assert "aichirou" in romaji.romaji_candidates("あいいちろう")
+
+    def test_classify(self):
+        assert romaji.classify_style("あい", "ai") == "neutral"
+        assert romaji.classify_style("さとう", "satou") == "wapuro"
+        assert romaji.classify_style("いっしゅう", "isshu") == "shortened"
+        assert romaji.classify_style("あいいちろう", "aichirou") == "mixed"
+        assert romaji.classify_style("さとう", "satoh") == "unknown"
+        assert romaji.classify_style("あゃ", "aya") == "unknown"  # 分割不能

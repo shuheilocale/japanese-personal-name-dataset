@@ -169,3 +169,27 @@ def romaji_candidates(hira):
     # type: (str) -> Set[str]
     """許容される全ローマ字候補（ワープロ式・長音省略式・混合）を返す。"""
     return _combine(_alternatives(tokenize(hira), "both"))
+
+
+def classify_style(hira, romaji_str):
+    # type: (str, str) -> str
+    """ローマ字表記が長音をどう扱っているかを判定する。"""
+    try:
+        tokens = tokenize(hira)
+    except ValueError:
+        return "unknown"
+    keep = _combine(_alternatives(tokens, "keep"))
+    drop = _combine(_alternatives(tokens, "drop"))
+    if keep == drop:  # 長音を含まない
+        return "neutral" if romaji_str in keep else "unknown"
+    in_keep = romaji_str in keep
+    in_drop = romaji_str in drop
+    if in_keep and in_drop:
+        return "neutral"
+    if in_keep:
+        return "wapuro"
+    if in_drop:
+        return "shortened"
+    if romaji_str in _combine(_alternatives(tokens, "both")):
+        return "mixed"
+    return "unknown"
