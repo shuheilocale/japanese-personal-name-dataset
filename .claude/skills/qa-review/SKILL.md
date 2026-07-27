@@ -27,7 +27,11 @@ description: Use when dataset CSV の LLM 品質レビューを実行すると�
    python3 .claude/skills/qa-review/scripts/qa_batch.py merge \
      --qa-dir qa --work-dir qa/work/<run-id> --run-id <run-id>
    ```
-6. 未処理/不正バッチが報告されたら、そのバッチだけ手順4をやり直して再マージ。
+6. 未処理（結果ファイルなし）・不正（スキーマ違反または id 重複）・未完了
+   （エントリの一部が findings/ok_hashes のどちらにも入っていない）バッチが
+   報告されたら、そのバッチだけ手順4をやり直して再マージする。merge は
+   run-id の findings JSONL をそのつど全置換するため、同じ結果を何度
+   再マージしても疑義が重複しない（人間が承認/却下した status は引き継がれる）。
 7. `qa/reports/<run-id>.md` をユーザーに提示し、`qa/findings/<run-id>.jsonl`
    と `qa/verified.json` をコミットする（dataset CSV は変更しない）。
 
@@ -51,7 +55,7 @@ description: Use when dataset CSV の LLM 品質レビューを実行すると�
 {
   "batch_id": "<batch_id>",
   "findings": [
-    {"id": "<file>:<reading>", "file": "<file>", "entry": "<raw をそのまま>",
+    {"id": "<file>:<reading>:<check>", "file": "<file>", "entry": "<raw をそのまま>",
      "check": "kanji_reading_mismatch | not_a_name | wrong_gender_file | romaji_reading_mismatch",
      "severity": "error", "confidence": "high | medium | low",
      "evidence": "<日本語で根拠>",
@@ -61,6 +65,8 @@ description: Use when dataset CSV の LLM 品質レビューを実行すると�
   ],
   "ok_hashes": ["<問題なしと判定した全エントリの hash>"]
 }
+id は run 内で一意であること。同一エントリに複数の finding を付ける場合は
+（例: fix_romaji と remove_row の両方を提案する場合）check を含めて一意化する。
 findings に入れたエントリの hash は ok_hashes に入れないこと。
 全エントリが findings か ok_hashes のどちらかに必ず入ること。
 ```

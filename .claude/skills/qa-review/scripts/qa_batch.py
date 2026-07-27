@@ -50,6 +50,11 @@ def _entries_for_file(filename, rows, kind):
 
 def prep(dataset_dir, qa_dir, out_dir, batch_size=100):
     # type: (str, str, str, int) -> dict
+    for filename in FIRST_NAME_FILES + LAST_NAME_FILES:
+        path = os.path.join(dataset_dir, filename)
+        if not os.path.exists(path):
+            raise FileNotFoundError(
+                "dataset ファイルが見つかりません: %s" % path)
     verified = findings_io.load_verified(os.path.join(qa_dir, "verified.json"))
     todo = []
     skipped = 0
@@ -79,34 +84,66 @@ def prep(dataset_dir, qa_dir, out_dir, batch_size=100):
     return manifest
 
 
+def _finding_key(d):
+    # type: (dict) -> tuple
+    """再マージ時に既存 status を引き継ぐための同一性キー。"""
+    fix = d.get("proposed_fix") or {}
+    return (d.get("id"), d.get("check"), d.get("entry"),
+            fix.get("action"), fix.get("value", ""))
+
+
 def merge(qa_dir, work_dir, run_id):
     # type: (str, str, str) -> dict
-    manifest = json.load(open(os.path.join(work_dir, "manifest.json"),
-                              encoding="utf-8"))
+    with open(os.path.join(work_dir, "manifest.json"), encoding="utf-8") as f:
+        manifest = json.load(f)
     results_dir = os.path.join(work_dir, "results")
     all_findings = []
     ok_hash_info = {}
     missing = []
     invalid = []
+    incomplete = []
     hash_to_entry = {}
+    seen_ids = set()
     for batch_id in manifest["batch_ids"]:
-        batch = json.load(open(os.path.join(work_dir, batch_id + ".json"),
-                               encoding="utf-8"))
+        with open(os.path.join(work_dir, batch_id + ".json"),
+                  encoding="utf-8") as f:
+            batch = json.load(f)
+        batch_hashes = set()
         for e in batch["entries"]:
             hash_to_entry[e["hash"]] = e
+            batch_hashes.add(e["hash"])
         result_path = os.path.join(results_dir, batch_id + ".json")
         if not os.path.exists(result_path):
             missing.append(batch_id)
             continue
-        result = json.load(open(result_path, encoding="utf-8"))
+        with open(result_path, encoding="utf-8") as f:
+            result = json.load(f)
+        findings_list = result.get("findings", [])
+        ok_hashes_list = result.get("ok_hashes", [])
         problems = []
-        for d in result.get("findings", []):
+        for d in findings_list:
             problems.extend(findings_io.validate_finding(d))
+        batch_ids_seen = set()
+        if not problems:
+            for d in findings_list:
+                fid = d["id"]
+                if fid in batch_ids_seen or fid in seen_ids:
+                    problems.append("id が run 内で重複しています: %s" % fid)
+                batch_ids_seen.add(fid)
         if problems:
             invalid.append(batch_id)
             continue
-        all_findings.extend(result.get("findings", []))
-        for h in result.get("ok_hashes", []):
+        finding_hashes = {findings_io.entry_hash(d["file"], d["entry"])
+                          for d in findings_list}
+        accounted = finding_hashes | set(ok_hashes_list)
+        missing_hashes = batch_hashes - accounted
+        if missing_hashes:
+            incomplete.append({"batch_id": batch_id,
+                               "missing": len(missing_hashes)})
+            continue
+        seen_ids.update(batch_ids_seen)
+        all_findings.extend(findings_list)
+        for h in ok_hashes_list:
             ok_hash_info[h] = hash_to_entry.get(h)
     flagged_hashes = set()
     for d in all_findings:
@@ -114,18 +151,31 @@ def merge(qa_dir, work_dir, run_id):
     today = datetime.date.today().isoformat()
     verified_path = os.path.join(qa_dir, "verified.json")
     verified = findings_io.load_verified(verified_path)
+    verified_added = 0
     for h, e in ok_hash_info.items():
         if h in flagged_hashes or e is None:
             continue
         verified[h] = {"file": e["file"], "reading": e["reading"],
                        "verified_at": today}
+        verified_added += 1
     findings_io.save_verified(verified_path, verified)
-    if all_findings:
-        findings_io.append_findings(
-            os.path.join(qa_dir, "findings", run_id + ".jsonl"), all_findings)
+
+    findings_path = os.path.join(qa_dir, "findings", run_id + ".jsonl")
+    existing_findings = []
+    if os.path.exists(findings_path):
+        existing_findings = findings_io.load_findings(findings_path)
+    if all_findings or existing_findings:
+        existing_status = {_finding_key(d): d["status"]
+                           for d in existing_findings}
+        for d in all_findings:
+            key = _finding_key(d)
+            if key in existing_status:
+                d["status"] = existing_status[key]
+        findings_io.save_findings(findings_path, all_findings)
+
     summary = {"run_id": run_id, "findings": len(all_findings),
-               "verified_added": len(ok_hash_info), "missing_batches": missing,
-               "invalid_batches": invalid}
+               "verified_added": verified_added, "missing_batches": missing,
+               "invalid_batches": invalid, "incomplete_batches": incomplete}
     _write_report(qa_dir, run_id, today, manifest, all_findings, summary)
     return summary
 
@@ -160,16 +210,19 @@ def _write_report(qa_dir, run_id, today, manifest, all_findings, summary):
                      % (d["id"], d["check"], d["severity"], d["confidence"],
                         d["evidence"], d["proposed_fix"]["action"],
                         d["proposed_fix"].get("value", "")))
-    if summary["missing_batches"] or summary["invalid_batches"]:
+    if (summary["missing_batches"] or summary["invalid_batches"]
+            or summary["incomplete_batches"]):
         lines += ["", "## 未処理バッチ（再実行が必要）", ""]
         for b in summary["missing_batches"]:
             lines.append("- %s（結果ファイルなし）" % b)
         for b in summary["invalid_batches"]:
-            lines.append("- %s（結果がスキーマ不正）" % b)
+            lines.append("- %s（結果がスキーマ不正または id 重複）" % b)
+        for b in summary["incomplete_batches"]:
+            lines.append("- %s（未判定エントリ %d 件）" % (b["batch_id"], b["missing"]))
     reports_dir = os.path.join(qa_dir, "reports")
     os.makedirs(reports_dir, exist_ok=True)
     with open(os.path.join(reports_dir, run_id + ".md"), "w",
-              encoding="utf-8") as f:
+              encoding="utf-8", newline="\n") as f:
         f.write("\n".join(lines) + "\n")
 
 
@@ -188,17 +241,22 @@ def main():
     m.add_argument("--run-id", required=True)
     args = parser.parse_args()
     if args.command == "prep":
-        manifest = prep(args.dataset_dir, args.qa_dir, args.out_dir,
-                        args.batch_size)
+        try:
+            manifest = prep(args.dataset_dir, args.qa_dir, args.out_dir,
+                            args.batch_size)
+        except FileNotFoundError as e:
+            print("エラー: %s" % e, file=sys.stderr)
+            return 1
         print("バッチ %d 個 / 対象 %d 件 / スキップ %d 件"
               % (len(manifest["batch_ids"]), manifest["total_entries"],
                  manifest["skipped_verified"]))
     else:
         summary = merge(args.qa_dir, args.work_dir, args.run_id)
-        print("疑義 %d 件 / verified 追加 %d 件 / 未処理 %s / 不正 %s"
+        print("疑義 %d 件 / verified 追加 %d 件 / 未処理 %s / 不正 %s / 未完了 %s"
               % (summary["findings"], summary["verified_added"],
                  summary["missing_batches"] or "なし",
-                 summary["invalid_batches"] or "なし"))
+                 summary["invalid_batches"] or "なし",
+                 summary["incomplete_batches"] or "なし"))
     return 0
 
 

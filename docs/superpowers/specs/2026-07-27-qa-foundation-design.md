@@ -136,6 +136,7 @@ OSS支援プログラム申請書（2026-07-19）に記した構想——「継�
 }
 ```
 
+- `id` は run 内で一意であること。同一エントリに複数の finding を付ける場合は check を含めて一意化する（例: `<file>:<reading>:<check>`）。
 - `check` の語彙: `format_error` / `romaji_reading_mismatch` / `kanji_reading_mismatch` / `not_a_name` / `wrong_gender_file` / `duplicate` / `cross_file_inconsistency`
 - `proposed_fix.action` の語彙: `remove_row` / `remove_kanji` / `fix_romaji` / `fix_reading` / `move_to_file` / `none`（人間判断のみ）
 - `status` の遷移: `pending → approved | rejected`、`approved → applied`
