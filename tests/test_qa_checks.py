@@ -64,3 +64,29 @@ class TestLoadRows:
         p.write_text("あい,ai,藍\n\nかい,kai,快\n", encoding="utf-8")
         rows = checks.load_rows(str(p))
         assert rows == [["あい", "ai", "藍"], [], ["かい", "kai", "快"]]
+
+
+class TestValidateScriptOutput:
+    def test_file_missing_error_format(self, tmp_path):
+        """validate.py のファイル欠落エラーが line == 0 の Finding として
+        'ERROR   filename: message' 形式で出力されることを検証（`:0` を含まない）。
+        """
+        import subprocess
+        # 空のディレクトリで validate.py を実行
+        result = subprocess.run(
+            ["python3", "./.claude/skills/validate-dataset/scripts/validate.py", str(tmp_path)],
+            capture_output=True,
+            text=True,
+            cwd="/Users/shuhei/99_private/japanese-personal-name-dataset/.claude/worktrees/qa-foundation"
+        )
+        # ファイル欠落エラーが出力される
+        assert "ファイルが存在しません" in result.stderr or "ファイルが存在しません" in result.stdout
+        # 出力に :0 が含まれていないことを確認（行番号なし形式であることを検証）
+        output = result.stderr + result.stdout
+        # "first_name_man_org.csv:" で始まり、その直後が `:0:` ではなく `: ` であることを確認
+        import re
+        lines_with_error = [l for l in output.split('\n') if 'first_name_man_org.csv:' in l]
+        assert lines_with_error, "ファイル欠落エラーが見つかりません"
+        # `:0:` を含まないことを確認
+        for line in lines_with_error:
+            assert ":0:" not in line, f"エラー形式が不正（:0: を含む）: {line}"

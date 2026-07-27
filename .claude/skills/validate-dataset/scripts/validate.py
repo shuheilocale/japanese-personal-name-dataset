@@ -57,9 +57,15 @@ def main():
     warnings = [f for f in findings if f.severity == "warning"]
     print()
     for f in errors:
-        print("ERROR   %s:%d: %s" % (f.file, f.line, f.message))
+        if f.line == 0:
+            print("ERROR   %s: %s" % (f.file, f.message))
+        else:
+            print("ERROR   %s:%d: %s" % (f.file, f.line, f.message))
     for f in warnings:
-        print("WARNING %s:%d: %s" % (f.file, f.line, f.message))
+        if f.line == 0:
+            print("WARNING %s: %s" % (f.file, f.message))
+        else:
+            print("WARNING %s:%d: %s" % (f.file, f.line, f.message))
     print("\n結果: エラー %d 件 / 警告 %d 件" % (len(errors), len(warnings)))
     return 1 if errors else 0
 
