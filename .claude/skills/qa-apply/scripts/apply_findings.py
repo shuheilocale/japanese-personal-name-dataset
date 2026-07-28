@@ -30,35 +30,46 @@ def _write_lines(path, lines):
         f.write("\n".join(lines) + ("\n" if lines else ""))
 
 
+_LAST_NAME_FILE = "last_name_org.csv"
+
+
 def _apply_one(lines, finding, current_entry):
     # type: (list, dict, str) -> tuple
-    """1件適用し (新lines, 移動行 or None, 成功か, 適用後の行 or None) を返す。
+    """1件適用し (新lines, 移動行 or None, 成功か, 適用後の行 or None, 失敗理由 or None) を返す。
 
     current_entry は元の finding["entry"] そのもの、または同一行に対する
     それより前の承認済み finding 適用後の行（進化形）。remove_row /
     move_to_file 適用後は行が消えるため呼び出し側は None を渡す。
+
+    名CSV（ひらがな,ローマ字,漢字...）と姓CSV（last_name_org.csv:
+    漢字,推定人数,ひらがな,ローマ字）とでは列レイアウトが異なるため、
+    fix_romaji / fix_reading で書き換える列インデックスを file で切り替える。
+    remove_kanji は姓CSVでは概念が存在しないため常にスキップする。
     """
     action = finding["proposed_fix"]["action"]
     value = finding["proposed_fix"].get("value", "")
+    is_last_name = finding["file"] == _LAST_NAME_FILE
+    if action == "remove_kanji" and is_last_name:
+        return lines, None, False, current_entry, "remove_kanji は姓CSVでは非対応です"
     if current_entry is None or current_entry not in lines:
-        return lines, None, False, current_entry
+        return lines, None, False, current_entry, "行が見つかりません"
     idx = lines.index(current_entry)
     if action == "remove_row":
-        return lines[:idx] + lines[idx + 1:], None, True, None
+        return lines[:idx] + lines[idx + 1:], None, True, None, None
     if action == "move_to_file":
-        return lines[:idx] + lines[idx + 1:], current_entry, True, None
+        return lines[:idx] + lines[idx + 1:], current_entry, True, None, None
     cols = current_entry.split(",")
     if action == "remove_kanji":
         cols = [cols[0], cols[1]] + [k for k in cols[2:] if k != value]
     elif action == "fix_romaji":
-        cols[1] = value
+        cols[3 if is_last_name else 1] = value
     elif action == "fix_reading":
-        cols[0] = value
+        cols[2 if is_last_name else 0] = value
     elif action == "none":
-        return lines, None, True, current_entry
+        return lines, None, True, current_entry, None
     new_entry = ",".join(cols)
     lines[idx] = new_entry
-    return lines, None, True, new_entry
+    return lines, None, True, new_entry, None
 
 
 def apply(findings_path, dataset_dir, qa_dir, report_path=None, dry_run=False):
@@ -92,11 +103,11 @@ def apply(findings_path, dataset_dir, qa_dir, report_path=None, dry_run=False):
             file_lines[fname] = _read_lines(os.path.join(dataset_dir, fname))
         key = (fname, d["entry"])
         current_entry = evolution.get(key, d["entry"])
-        new_lines, moved, ok, new_entry = _apply_one(
+        new_lines, moved, ok, new_entry, reason = _apply_one(
             file_lines[fname], d, current_entry)
         if not ok:
             skipped.append(d["id"])
-            print("スキップ（行が見つかりません）: %s" % d["id"])
+            print("スキップ（%s）: %s" % (reason or "行が見つかりません", d["id"]))
             continue
         file_lines[fname] = new_lines
         evolution[key] = new_entry

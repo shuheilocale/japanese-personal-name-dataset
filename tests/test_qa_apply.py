@@ -11,6 +11,8 @@ def _write_dataset(tmp_path):
     (d / "first_name_man_org.csv").write_text(
         "ああす,asu,亜明日\nあい,ai,藍,愛\nかおる,kaoru,薫\n", encoding="utf-8")
     (d / "first_name_woman_org.csv").write_text("さくら,sakura,桜\n", encoding="utf-8")
+    (d / "last_name_org.csv").write_text(
+        "佐藤,1887000,さとう,satou\n", encoding="utf-8")
     return str(d)
 
 
@@ -202,6 +204,52 @@ class TestApply:
         assert "あい" not in content
         statuses = [d["status"] for d in findings_io.load_findings(fp)]
         assert statuses == ["applied", "approved"]
+
+    def test_fix_romaji_on_last_name_csv_keeps_population_column(self, tmp_path):
+        # last_name_org.csv は 漢字,推定人数,ひらがな,ローマ字 の列順。
+        # fix_romaji は col3（ローマ字）を書き換え、col1（推定人数）は不変であること。
+        ds = _write_dataset(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [
+            _finding("last_name_org.csv", "佐藤,1887000,さとう,satou", "fix_romaji",
+                     "sato", check="romaji_reading_mismatch"),
+        ])
+        result = apply_findings.apply(fp, ds, str(tmp_path / "qa"))
+        assert result["applied"] == 1
+        content = open(os.path.join(ds, "last_name_org.csv"),
+                       encoding="utf-8").read()
+        assert "佐藤,1887000,さとう,sato\n" in content
+
+    def test_fix_reading_on_last_name_csv_changes_only_hiragana_column(self, tmp_path):
+        # fix_reading は col2（ひらがな）を書き換え、漢字・推定人数・ローマ字は不変。
+        ds = _write_dataset(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [
+            _finding("last_name_org.csv", "佐藤,1887000,さとう,satou", "fix_reading",
+                     "さとお", check="romaji_reading_mismatch"),
+        ])
+        result = apply_findings.apply(fp, ds, str(tmp_path / "qa"))
+        assert result["applied"] == 1
+        content = open(os.path.join(ds, "last_name_org.csv"),
+                       encoding="utf-8").read()
+        assert "佐藤,1887000,さとお,satou\n" in content
+
+    def test_remove_kanji_on_last_name_csv_is_skipped(self, tmp_path):
+        # remove_kanji は名CSV固有の概念（複数の漢字表記からの除外）であり、
+        # 姓CSVには適用できないため、承認済みでも適用せずスキップ扱いにする。
+        ds = _write_dataset(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        f = _finding("last_name_org.csv", "佐藤,1887000,さとう,satou", "remove_kanji",
+                     "佐藤", check="kanji_reading_mismatch")
+        findings_io.append_findings(fp, [f])
+        result = apply_findings.apply(fp, ds, str(tmp_path / "qa"))
+        assert result["applied"] == 0
+        assert result["skipped"] == [f["id"]]
+        content = open(os.path.join(ds, "last_name_org.csv"),
+                       encoding="utf-8").read()
+        assert content == "佐藤,1887000,さとう,satou\n"
+        # スキップされた finding は approved のまま残る
+        assert findings_io.load_findings(fp)[0]["status"] == "approved"
 
     def test_from_report_promotes_checked(self, tmp_path):
         ds = _write_dataset(tmp_path)
