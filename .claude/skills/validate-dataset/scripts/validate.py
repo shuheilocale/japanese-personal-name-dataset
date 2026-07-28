@@ -98,5 +98,13 @@ def main():
     return 1 if errors else 0
 
 
+def _force_utf8_output():
+    # type: () -> None
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure") and (stream.encoding or "").lower() not in ("utf-8", "utf8"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 if __name__ == "__main__":
+    _force_utf8_output()
     sys.exit(main())

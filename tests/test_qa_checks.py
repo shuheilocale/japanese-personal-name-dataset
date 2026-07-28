@@ -84,7 +84,7 @@ class TestValidateScriptOutput:
         result = subprocess.run(
             [sys.executable, validate_script, str(tmp_path)],
             capture_output=True,
-            text=True,
+            encoding="utf-8",
             cwd=repo_root
         )
         # ファイル欠落エラーが出力される

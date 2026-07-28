@@ -78,7 +78,7 @@ class TestPrepCli:
              "--dataset-dir", str(tmp_path / "no_such_dataset_dir"),
              "--qa-dir", str(tmp_path / "qa"),
              "--out-dir", str(tmp_path / "work")],
-            capture_output=True, text=True, cwd=repo_root,
+            capture_output=True, encoding="utf-8", cwd=repo_root,
         )
         assert result.returncode == 1
         assert "Traceback" not in result.stderr
