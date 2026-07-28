@@ -159,7 +159,7 @@ class TestGetLastNames:
     def test_get_all_last_names(self):
         """Test getting all last names."""
         results = get_last_names()
-        assert len(results) == 2000
+        assert len(results) == 1999
 
     def test_get_top_10(self):
         """Test getting top 10 last names."""

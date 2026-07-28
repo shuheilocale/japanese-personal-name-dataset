@@ -20,22 +20,22 @@ class TestLoadDataset:
         assert len(woman_names) > 0
 
         # Check expected counts (from README)
-        assert len(man_names) == 5675
-        assert len(woman_names) == 3344
+        assert len(man_names) == 5638
+        assert len(woman_names) == 3339
 
     def test_load_dataset_org(self):
         """Test loading original (full) dataset."""
         man_names, woman_names = load_dataset(kind='org')
 
-        assert len(man_names) == 5675
-        assert len(woman_names) == 3344
+        assert len(man_names) == 5638
+        assert len(woman_names) == 3339
 
     def test_load_dataset_opti(self):
         """Test loading optimized (popular names) dataset."""
         man_names, woman_names = load_dataset(kind='opti')
 
         # Check expected counts (from README)
-        assert len(man_names) == 703
+        assert len(man_names) == 702
         assert len(woman_names) == 241
 
         # Optimized should be smaller than original
@@ -56,7 +56,7 @@ class TestLoadDataset:
         assert len(last_names) > 0
 
         # Check expected count (from README)
-        assert len(last_names) == 2000
+        assert len(last_names) == 1999
 
     def test_load_dataset_invalid_kind(self):
         """Test that invalid kind raises ValueError."""
@@ -219,13 +219,13 @@ class TestAPI:
 
         # Test with kind parameter
         man, woman = load_dataset(kind='opti')
-        assert len(man) == 703
+        assert len(man) == 702
 
         # Test with include_last_names parameter
         man, woman, last = load_dataset(include_last_names=True)
-        assert len(last) == 2000
+        assert len(last) == 1999
 
         # Test with both parameters
         man, woman, last = load_dataset(kind='opti', include_last_names=True)
-        assert len(man) == 703
-        assert len(last) == 2000
+        assert len(man) == 702
+        assert len(last) == 1999

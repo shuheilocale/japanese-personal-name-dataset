@@ -36,4 +36,4 @@ LLM による品質レビューは /qa-review、承認済み修正の適用は /
 ## 注意
 
 - dataset CSV は PreToolUse フック（[.claude/settings.json](../../settings.json)）で編集がブロックされている。データ修正はユーザーの明示的な承認を得てから、フックの一時無効化またはユーザー自身の操作で行うこと。
-- 期待行数（README 記載値）: man_org 5675 / man_opti 703 / woman_org 3344 / woman_opti 241 / last_name 2000。行数が変わる変更はバージョンアップとREADME更新を伴うべき。
+- 期待行数（README 記載値）: man_org 5638 / man_opti 702 / woman_org 3339 / woman_opti 241 / last_name 1999。行数が変わる変更はバージョンアップとREADME更新を伴うべき。

@@ -10,11 +10,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 CSVデータセットは `japanese_personal_name_dataset/dataset/` に配置されています：
 
-- `first_name_man_org.csv` - 男性の名（5,675種類）
-- `first_name_man_opti.csv` - 男性の名・最適化版（703種類、有名な名前を抜粋）
-- `first_name_woman_org.csv` - 女性の名（3,344種類）
+- `first_name_man_org.csv` - 男性の名（5,638種類）
+- `first_name_man_opti.csv` - 男性の名・最適化版（702種類、有名な名前を抜粋）
+- `first_name_woman_org.csv` - 女性の名（3,339種類）
 - `first_name_woman_opti.csv` - 女性の名・最適化版（241種類）
-- `last_name_org.csv` - 姓（2,000種類）
+- `last_name_org.csv` - 姓（1,999種類）
 
 ### CSVフォーマット
 

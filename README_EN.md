@@ -12,8 +12,8 @@ A comprehensive dataset of Japanese personal names (first names and last names) 
 
 ## Features
 
-- 5,675 male first names (703 optimized/popular names)
-- 3,344 female first names (241 optimized/popular names)
+- 5,638 male first names (702 optimized/popular names)
+- 3,339 female first names (241 optimized/popular names)
 - 2,000 last names with estimated population data
 - Multiple kanji variations for each reading
 - Romaji (Hepburn) transliterations
@@ -96,7 +96,7 @@ print(woman_names['はなこ'])
 ```python
 # Load only popular names
 man_names, woman_names = load_dataset(kind='opti')
-print(f"Male names: {len(man_names)} types")    # 703 types
+print(f"Male names: {len(man_names)} types")    # 702 types
 print(f"Female names: {len(woman_names)} types")  # 241 types
 ```
 
@@ -165,11 +165,11 @@ if is_valid_name('太郎', 'たろう'):
 
 | Type | Count |
 |------|-------|
-| Male first names (original) | 5,675 |
-| Male first names (optimized) | 703 |
-| Female first names (original) | 3,344 |
+| Male first names (original) | 5,638 |
+| Male first names (optimized) | 702 |
+| Female first names (original) | 3,339 |
 | Female first names (optimized) | 241 |
-| Last names | 2,000 |
+| Last names | 1,999 |
 
 ### Kanji Variations (per reading)
 
