@@ -18,8 +18,10 @@
   .finding { border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; margin: 10px 0; }
   .finding.approved { border-color: #16a34a; background: #f0fdf4; }
   .finding.rejected { border-color: #9ca3af; background: #f9fafb; opacity: .7; }
+  .finding.applied { border-color: #9ca3af; background: #f3f4f6; opacity: .6; }
   .badge { display: inline-block; font-size: 12px; padding: 1px 6px; border-radius: 4px; margin-right: 4px; background: #e5e7eb; }
   .badge.sig { background: #fef3c7; }
+  .badge.sig.stale { background: #fecaca; }
   .badge.high { background: #fecaca; } .badge.medium { background: #fde68a; } .badge.low { background: #e5e7eb; }
   .keys { color: #6b7280; font-size: 12px; margin-top: 12px; }
 </style>
@@ -37,17 +39,27 @@
   <label>confidence <select id="fConf"><option value="">all</option><option>high</option><option>medium</option><option>low</option></select></label>
   <label>action <select id="fAction"><option value="">all</option></select></label>
   <label>file <select id="fFile"><option value="">all</option></select></label>
-  <label>signal <select id="fSig"><option value="">all</option><option value="dup_elsewhere">dup_elsewhere</option><option value="suffix_rule">suffix_rule</option><option value="fix_reading_dup">fix_reading_dup</option><option value="none">なし</option></select></label>
+  <label>signal <select id="fSig"><option value="">all</option><option value="dup_elsewhere">dup_elsewhere</option><option value="suffix_rule">suffix_rule</option><option value="fix_reading_dup">fix_reading_dup</option><option value="value_not_in_row">value_not_in_row</option><option value="entry_stale">entry_stale</option><option value="none">なし</option></select></label>
   <div id="listCount"></div>
   <div id="list"></div>
 </aside>
 <main id="main"></main>
 <script>
-let items = [], rows = [], cur = 0, undo = [];
+let items = [], rows = [], cur = 0, undo = [], busy = false;
+const DECIDABLE = ['pending', 'approved', 'rejected'];
+const DECIDE_KEYS = ['a', 'r', 's', 'u'];
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const SIG_LABEL = s => s.type === 'dup_elsewhere' ? `別読み行にも存在: ${s.readings.join('・')}`
-  : s.type === 'suffix_rule' ? `接尾辞「${s.suffix}」は通常「${s.expected}」読み` : '提案読みは既存行と重複';
+const SIG_LABEL = s => {
+  switch (s.type) {
+    case 'dup_elsewhere': return `「${s.kanji}」は別読み行にも存在: ${s.readings.join('・')}`;
+    case 'suffix_rule': return `「${s.kanji}」の接尾辞「${s.suffix}」は通常「${s.expected}」読み`;
+    case 'fix_reading_dup': return '提案読みは既存行と重複';
+    case 'value_not_in_row': return `対象漢字が行に無い: ${s.kanji.join('・')}`;
+    case 'entry_stale': return s.current ? `entry が現行行と不一致（現行: ${s.current}）` : 'entry が現行行に無い（同キー行なし/複数）';
+    default: return s.type;
+  }
+};
 
 async function load() {
   const r = await fetch('/api/items'); const body = await r.json();
@@ -81,41 +93,70 @@ function renderMain() {
   const g = rows[cur]; if (!g) { $('main').innerHTML = '<p>表示する行がありません。</p>'; return; }
   const row = g[0].row, targets = new Set(g.flatMap(i => i.targets));
   const chips = row.kanji.map(k => `<span class="chip ${targets.has(k) ? 'target' : ''}">${esc(k)}</span>`).join('');
-  const findings = g.map(i => `<div class="finding ${i.status}">
-      <span class="badge ${i.confidence}">${esc(i.confidence)}</span><span class="badge">${esc(i.check)}</span>
+  const findings = g.map(i => `<div class="finding ${esc(i.status)}">
+      <span class="badge ${esc(i.confidence)}">${esc(i.confidence)}</span><span class="badge">${esc(i.check)}</span>
       <span class="badge">${esc(i.proposed_fix.action)} ${esc(i.proposed_fix.value || '')}</span><span class="badge">${esc(i.status)}</span>
-      ${i.signals.map(s => `<span class="badge sig">⚑ ${esc(SIG_LABEL(s))}</span>`).join('')}
-      <p>${esc(i.evidence)}</p><a href="${esc(i.search_url)}" target="_blank">検索</a></div>`).join('');
+      ${i.signals.map(s => `<span class="badge sig ${s.type === 'entry_stale' ? 'stale' : ''}">⚑ ${esc(SIG_LABEL(s))}</span>`).join('')}
+      <p>${esc(i.evidence)}</p><a href="${esc(i.search_url)}" target="_blank" rel="noopener">検索</a></div>`).join('');
+  const decidable = g.filter(i => DECIDABLE.includes(i.status)).length;
   $('main').innerHTML = `<h2>${esc(row.reading)} <small>${esc(row.romaji)}${row.population ? ' / ' + esc(row.population) + '人' : ''}</small> <small>${esc(g[0].file)}</small></h2>
     <div>${chips}</div>${findings}
-    <div class="keys">a=承認 r=却下 s=保留 u=取り消し j/k=次/前 （この行の ${g.length} 件すべてに適用）</div>`;
+    <div class="keys">a=承認 r=却下 s=保留 u=取り消し j/k=次/前 （この行の ${decidable} 件に適用${decidable < g.length ? '、applied は対象外' : ''}）</div>`;
   const el = $('list').children[cur]; if (el) el.scrollIntoView({ block: 'nearest' });
 }
+// 判断を送信して items に反映する。成功なら true。失敗時は alert して false（items は変更しない）。
 async function decide(ids, status, remember = true) {
   const prevEntries = remember ? ids.map(id => ({ id, prev: items.find(i => i.id === id).status })) : null;
-  const r = await fetch('/api/decide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, status }) });
-  if (!r.ok) { alert('エラー: ' + (await r.text())); return; }
+  let r;
+  try {
+    r = await fetch('/api/decide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, status }) });
+  } catch (e) { alert('通信エラー: ' + e); return false; }
+  if (!r.ok) { alert('エラー: ' + (await r.text())); return false; }
   if (remember) undo.push(prevEntries);
   const body = await r.json(); renderCounts(body.counts);
   for (const i of items) if (ids.includes(i.id)) i.status = status;
+  return true;
+}
+// decide 実行中の連打・キーリピートによる二重送信を防ぐ。
+async function withBusy(fn) {
+  if (busy) return;
+  busy = true;
+  try { await fn(); } finally { busy = false; }
 }
 async function decideRow(status) {
   const g = rows[cur]; if (!g) return;
-  await decide(g.map(i => i.id), status);
+  const ids = g.filter(i => DECIDABLE.includes(i.status)).map(i => i.id); if (!ids.length) return;
+  await withBusy(() => decide(ids, status));
   apply();
 }
 async function undoLast() {
   const last = undo.pop(); if (!last) return;
-  for (const { id, prev } of last) await decide([id], prev, false);
+  await withBusy(async () => {
+    // prev status ごとにまとめて 1 回ずつ POST する。
+    const byPrev = new Map();
+    for (const { id, prev } of last) { if (!byPrev.has(prev)) byPrev.set(prev, []); byPrev.get(prev).push(id); }
+    const groups = [...byPrev.entries()];
+    for (let n = 0; n < groups.length; n++) {
+      const [prev, ids] = groups[n];
+      if (!(await decide(ids, prev, false))) {
+        // 失敗した分は取り消し履歴に戻して再試行できるようにする。
+        undo.push(groups.slice(n).flatMap(([p, is]) => is.map(id => ({ id, prev: p }))));
+        break;
+      }
+    }
+  });
   apply();
 }
 async function bulk(status) {
-  const f = filtered(); if (!f.length) return;
-  if (!confirm(`表示中の ${f.length} 件を ${status} にします。よろしいですか？`)) return;
-  await decide(f.map(i => i.id), status); apply();
+  const f = filtered().filter(i => DECIDABLE.includes(i.status)); if (!f.length) return;
+  if (!confirm(`表示中の ${f.length} 件を ${status} にします（applied は対象外）。よろしいですか？`)) return;
+  await withBusy(() => decide(f.map(i => i.id), status));
+  apply();
 }
 document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
   if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+  if (DECIDE_KEYS.includes(e.key) && busy) return;
   if (e.key === 'a') decideRow('approved'); else if (e.key === 'r') decideRow('rejected'); else if (e.key === 's') decideRow('pending');
   else if (e.key === 'u') undoLast(); else if (e.key === 'j') { if (rows.length) { cur = Math.min(cur + 1, rows.length - 1); apply(); } }
   else if (e.key === 'k') { if (rows.length) { cur = Math.max(cur - 1, 0); apply(); } }
