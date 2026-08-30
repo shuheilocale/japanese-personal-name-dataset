@@ -165,6 +165,29 @@ class TestApply:
         statuses = [d["status"] for d in findings_io.load_findings(fp)]
         assert statuses == ["applied", "applied"]
 
+    def test_remove_kanji_with_multiple_values_removes_all(self, tmp_path):
+        # value が "克真, 克麻, 勝真" のように複数漢字を含む場合（`、` 区切りも可）、
+        # 分割して全漢字を除去する。空白は無視し、行に無い漢字は無視される。
+        ds = _write_dataset(tmp_path)
+        (tmp_path / "dataset" / "first_name_man_org.csv").write_text(
+            "かづま,kazuma,一真,克真,克麻,勝真,和真\n", encoding="utf-8")
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [
+            _finding("first_name_man_org.csv", "かづま,kazuma,一真,克真,克麻,勝真,和真",
+                     "remove_kanji", "克真, 克麻、勝真, 無い", check="kanji_reading_mismatch"),
+        ])
+        result = apply_findings.apply(fp, ds, str(tmp_path / "qa"))
+        assert result["applied"] == 1
+        content = open(os.path.join(ds, "first_name_man_org.csv"),
+                       encoding="utf-8").read()
+        assert content == "かづま,kazuma,一真,和真\n"
+
+    def test_split_values_rules(self):
+        assert apply_findings._split_values("克真, 克麻, 勝真") == ["克真", "克麻", "勝真"]
+        assert apply_findings._split_values("克真、克麻") == ["克真", "克麻"]
+        assert apply_findings._split_values(" 愛 ,, ") == ["愛"]
+        assert apply_findings._split_values("") == []
+
     def test_remove_kanji_then_fix_romaji_on_same_row_both_applied(self, tmp_path):
         # 同一行に対する remove_kanji と fix_romaji の組み合わせも、
         # 進化した行を追跡して両方適用される。

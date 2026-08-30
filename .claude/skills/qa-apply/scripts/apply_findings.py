@@ -18,6 +18,16 @@ sys.path.insert(0, os.path.abspath(os.path.join(
 import findings_io  # noqa: E402
 
 _REPORT_CHECKED_RE = re.compile(r"^- \[x\] `([^`]+)`", re.IGNORECASE)
+_VALUE_SEP_RE = re.compile(r"[,、]")
+
+
+def _split_values(value):
+    # type: (str) -> list
+    """remove_kanji の value を `,` / `、` で分割し strip・空要素除去する。
+
+    triage_server.split_values と同じ規則（"克真, 克麻, 勝真" → 3漢字）。
+    """
+    return [v.strip() for v in _VALUE_SEP_RE.split(value or "") if v.strip()]
 
 
 def _read_lines(path):
@@ -60,7 +70,8 @@ def _apply_one(lines, finding, current_entry):
         return lines[:idx] + lines[idx + 1:], current_entry, True, None, None
     cols = current_entry.split(",")
     if action == "remove_kanji":
-        cols = [cols[0], cols[1]] + [k for k in cols[2:] if k != value]
+        targets = set(_split_values(value))
+        cols = [cols[0], cols[1]] + [k for k in cols[2:] if k not in targets]
     elif action == "fix_romaji":
         cols[3 if is_last_name else 1] = value
     elif action == "fix_reading":
