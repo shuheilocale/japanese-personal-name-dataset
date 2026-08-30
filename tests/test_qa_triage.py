@@ -119,6 +119,18 @@ class TestHttp:
         conn.close()
         return resp.status, data
 
+    def _req_with_headers(self, srv, method, path, body=None, headers=None):
+        conn = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=5)
+        payload = json.dumps(body).encode("utf-8") if body is not None else None
+        h = {"Content-Type": "application/json"}
+        if headers:
+            h.update(headers)
+        conn.request(method, path, body=payload, headers=h)
+        resp = conn.getresponse()
+        data = resp.read().decode("utf-8")
+        conn.close()
+        return resp.status, data
+
     def test_items_and_decide(self, tmp_path):
         srv, p = self._start(tmp_path)
         try:
@@ -134,5 +146,21 @@ class TestHttp:
             assert status == 400
             status, data = self._req(srv, "GET", "/")
             assert status == 200 and "<html" in data.lower()
+        finally:
+            srv.shutdown()
+
+    def test_malformed_content_length(self, tmp_path):
+        srv, _ = self._start(tmp_path)
+        try:
+            status, _ = self._req_with_headers(srv, "POST", "/api/decide", {"ids": ["a"], "status": "approved"}, {"Content-Length": "abc"})
+            assert status == 400
+        finally:
+            srv.shutdown()
+
+    def test_non_object_json_body(self, tmp_path):
+        srv, _ = self._start(tmp_path)
+        try:
+            status, _ = self._req(srv, "POST", "/api/decide", [1, 2, 3])
+            assert status == 400
         finally:
             srv.shutdown()

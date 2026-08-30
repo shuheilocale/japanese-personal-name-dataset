@@ -175,11 +175,11 @@ def make_handler(state):
             if self.path != "/api/decide":
                 self._send(404, {"error": "not found"})
                 return
-            length = int(self.headers.get("Content-Length", "0"))
             try:
+                length = int(self.headers.get("Content-Length", "0"))
                 body = json.loads(self.rfile.read(length).decode("utf-8"))
                 result = state.decide(list(body.get("ids", [])), body.get("status", ""))
-            except (ValueError, KeyError, TypeError) as e:
+            except (ValueError, KeyError, TypeError, AttributeError) as e:
                 self._send(400, {"error": str(e)})
                 return
             self._send(200, result)
