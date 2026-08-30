@@ -6,17 +6,18 @@ JSON API で返す。判断（approved/rejected/pending）は即座に JSONL へ
 import argparse
 import json
 import os
+import re
 import sys
+import threading
 import urllib.parse
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 sys.path.insert(0, os.path.abspath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     os.pardir, os.pardir, "validate-dataset", "scripts")))
 
-import checks  # noqa: E402
 import findings_io  # noqa: E402
 
 FIRST_NAME_FILES = [
@@ -29,27 +30,65 @@ SUFFIX_RULES = {
     "夫": "お", "雄": "お", "男": "お", "美": "み", "江": "え", "恵": "え", "枝": "え",
 }
 DECIDABLE = ("pending", "approved", "rejected")
+ALLOWED_HOSTS = ("127.0.0.1", "localhost")
+_VALUE_SEP_RE = re.compile(r"[,、]")
+
+
+def split_values(value):
+    # type: (str) -> List[str]
+    """proposed_fix.value を `,` / `、` で分割し、strip して空要素を除いたリストを返す。
+
+    例: "克真, 克麻, 勝真" → ["克真", "克麻", "勝真"]
+    """
+    return [v.strip() for v in _VALUE_SEP_RE.split(value or "") if v.strip()]
+
+
+def host_allowed(host):
+    # type: (str) -> bool
+    """Host ヘッダが 127.0.0.1[:port] / localhost[:port] のときだけ True（CSRF 対策）。"""
+    h = (host or "").strip().lower()
+    if ":" in h:
+        h, port = h.rsplit(":", 1)
+        if not port.isdigit():
+            return False
+    return h in ALLOWED_HOSTS
+
+
+def _read_raw_lines(path):
+    # type: (str) -> List[str]
+    """apply_findings と同じ規則（splitlines・空行除去）で生の行を読む。"""
+    with open(path, encoding="utf-8") as f:
+        return [ln for ln in f.read().splitlines() if ln.strip()]
+
+
+def _empty_info():
+    # type: () -> dict
+    return {"kanji_index": {}, "readings": set(), "rows": set(), "by_key": {}}
 
 
 def load_dataset_index(dataset_dir):
     # type: (str) -> Dict[str, dict]
-    """ファイルごとに 漢字→読み集合 と 読み集合 を作る。"""
+    """ファイルごとに 漢字→読み集合・読み集合・現行 raw 行集合・キー→raw 行 を作る。
+
+    キーは名ファイルでは読み（col0）、姓ファイルでは漢字（col0）。
+    """
     index = {}  # type: Dict[str, dict]
-    for fn in FIRST_NAME_FILES:
-        kanji_index = {}  # type: Dict[str, set]
-        readings = set()
-        for r in checks.load_rows(os.path.join(dataset_dir, fn)):
+    for fn in FIRST_NAME_FILES + [LAST_NAME_FILE]:
+        info = _empty_info()
+        for raw in _read_raw_lines(os.path.join(dataset_dir, fn)):
+            r = raw.split(",")
             if len(r) < 2:
                 continue
-            readings.add(r[0])
+            info["rows"].add(raw)
+            info["by_key"].setdefault(r[0], []).append(raw)
+            if fn == LAST_NAME_FILE:
+                if len(r) == 4:
+                    info["readings"].add(r[2])
+                continue
+            info["readings"].add(r[0])
             for k in r[2:]:
-                kanji_index.setdefault(k, set()).add(r[0])
-        index[fn] = {"kanji_index": kanji_index, "readings": readings}
-    readings = set()
-    for r in checks.load_rows(os.path.join(dataset_dir, LAST_NAME_FILE)):
-        if len(r) == 4:
-            readings.add(r[2])
-    index[LAST_NAME_FILE] = {"kanji_index": {}, "readings": readings}
+                info["kanji_index"].setdefault(k, set()).add(r[0])
+        index[fn] = info
     return index
 
 
@@ -61,24 +100,51 @@ def parse_row(file, entry):
     return {"reading": c[0], "romaji": c[1] if len(c) > 1 else "", "kanji": c[2:], "population": None}
 
 
+def current_row_for(entry, info):
+    # type: (str, dict) -> object
+    """entry と同じキー（col0）を持つ現行行が一意ならその raw、なければ None。"""
+    cands = info["by_key"].get(entry.split(",")[0], [])
+    return cands[0] if len(cands) == 1 else None
+
+
 def compute_signals(finding, index):
     # type: (dict, Dict[str, dict]) -> List[dict]
     signals = []  # type: List[dict]
     row = parse_row(finding["file"], finding["entry"])
     action = finding["proposed_fix"]["action"]
     value = finding["proposed_fix"].get("value", "")
-    info = index.get(finding["file"], {"kanji_index": {}, "readings": set()})
+    info = index.get(finding["file"])
+    known_file = info is not None
+    if info is None:
+        info = _empty_info()
     if action == "remove_kanji":
-        others = sorted(info["kanji_index"].get(value, set()) - {row["reading"]})
-        if others:
-            signals.append({"type": "dup_elsewhere", "readings": others})
-        for suffix, expected in SUFFIX_RULES.items():
-            if value.endswith(suffix) and not row["reading"].endswith(expected):
-                signals.append({"type": "suffix_rule", "suffix": suffix, "expected": expected})
-                break
+        targets = split_values(value)
+        for k in targets:
+            others = sorted(info["kanji_index"].get(k, set()) - {row["reading"]})
+            if others:
+                signals.append({"type": "dup_elsewhere", "kanji": k, "readings": others})
+        for k in targets:
+            for suffix, expected in SUFFIX_RULES.items():
+                if k.endswith(suffix) and not row["reading"].endswith(expected):
+                    signals.append({"type": "suffix_rule", "kanji": k,
+                                    "suffix": suffix, "expected": expected})
+                    break
+        missing = [k for k in targets if k not in row["kanji"]]
+        if missing:
+            signals.append({"type": "value_not_in_row", "kanji": missing})
     if action == "fix_reading" and value in info["readings"]:
         signals.append({"type": "fix_reading_dup"})
+    if known_file and finding["entry"] not in info["rows"]:
+        signals.append({"type": "entry_stale",
+                        "current": current_row_for(finding["entry"], info)})
     return signals
+
+
+def search_url(targets, row):
+    # type: (List[str], dict) -> str
+    terms = list(targets) if targets else list(row["kanji"][:3])
+    query = " ".join(terms + [row["reading"], "名前"])
+    return "https://www.google.com/search?q=" + urllib.parse.quote(query)
 
 
 def build_items(findings, index):
@@ -88,13 +154,12 @@ def build_items(findings, index):
         row = parse_row(d["file"], d["entry"])
         action = d["proposed_fix"]["action"]
         value = d["proposed_fix"].get("value", "")
-        targets = [value] if action == "remove_kanji" and value else []
-        query = " ".join([t for t in targets] + [row["reading"], "名前"])
+        targets = split_values(value) if action == "remove_kanji" else []
         item = dict(d)
         item.update({
             "row": row, "targets": targets,
             "signals": compute_signals(d, index),
-            "search_url": "https://www.google.com/search?q=" + urllib.parse.quote(query),
+            "search_url": search_url(targets, row),
         })
         items.append(item)
     return items
@@ -125,9 +190,17 @@ def apply_decision(findings, ids, status):
 
 def save_atomic(path, findings):
     # type: (str, List[dict]) -> None
+    """tmp に書いてから os.replace で置換する。失敗時は tmp を残さない。"""
     tmp = path + ".tmp"
-    findings_io.save_findings(tmp, findings)
-    os.replace(tmp, path)
+    try:
+        findings_io.save_findings(tmp, findings)
+        os.replace(tmp, path)
+    except OSError:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
 
 
 UI_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "triage_ui.html")
@@ -139,17 +212,28 @@ class TriageState(object):
         self.findings_path = findings_path
         self.findings = findings_io.load_findings(findings_path)
         self.index = load_dataset_index(dataset_dir)
+        self._lock = threading.Lock()
 
     def items_payload(self):
         # type: () -> dict
-        return {"items": build_items(self.findings, self.index),
-                "counts": count_statuses(self.findings)}
+        with self._lock:
+            return {"items": build_items(self.findings, self.index),
+                    "counts": count_statuses(self.findings)}
 
     def decide(self, ids, status):
         # type: (List[str], str) -> dict
-        n = apply_decision(self.findings, ids, status)
-        save_atomic(self.findings_path, self.findings)
-        return {"updated": n, "counts": count_statuses(self.findings)}
+        """判断を反映して保存する。保存に失敗したらメモリ上の status を戻して再送出。"""
+        with self._lock:
+            by_id = {d["id"]: d for d in self.findings}
+            snapshot = {i: by_id[i]["status"] for i in ids if i in by_id}
+            n = apply_decision(self.findings, ids, status)
+            try:
+                save_atomic(self.findings_path, self.findings)
+            except OSError:
+                for i, prev in snapshot.items():
+                    by_id[i]["status"] = prev
+                raise
+            return {"updated": n, "counts": count_statuses(self.findings)}
 
 
 def make_handler(state):
@@ -177,12 +261,20 @@ def make_handler(state):
             if self.path != "/api/decide":
                 self._send(404, {"error": "not found"})
                 return
+            if not host_allowed(self.headers.get("Host", "")):
+                self._send(403, {"error": "許可されていない Host ヘッダです"})
+                return
             try:
                 length = int(self.headers.get("Content-Length", "0"))
+                if length < 0:
+                    raise ValueError("Content-Length が負です")
                 body = json.loads(self.rfile.read(length).decode("utf-8"))
                 result = state.decide(list(body.get("ids", [])), body.get("status", ""))
             except (ValueError, KeyError, TypeError, AttributeError) as e:
                 self._send(400, {"error": str(e)})
+                return
+            except OSError as e:
+                self._send(500, {"error": "保存に失敗しました: %s" % e})
                 return
             self._send(200, result)
 
@@ -212,7 +304,12 @@ def main():
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args()
-    server = make_server(args.findings, args.dataset_dir, args.port)
+    try:
+        server = make_server(args.findings, args.dataset_dir, args.port)
+    except OSError as e:
+        print("ポート %d を使用できません（他のプロセスが使用中の可能性があります。"
+              "--port で別のポートを指定してください）: %s" % (args.port, e), file=sys.stderr)
+        return 1
     url = "http://127.0.0.1:%d/" % server.server_address[1]
     print("トリアージ UI: %s  （Ctrl+C で終了）" % url)
     if not args.no_browser:
@@ -221,6 +318,8 @@ def main():
         server.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        server.server_close()
     return 0
 
 
