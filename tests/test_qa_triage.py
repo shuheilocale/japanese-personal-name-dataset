@@ -1,6 +1,8 @@
 """triage_server.py（保留 findings の判断 UI）のテスト。"""
+import http.client
 import json
 import os
+import threading
 import urllib.parse
 
 import pytest
@@ -93,3 +95,44 @@ class TestDecision:
             triage_server.apply_decision(fs, ["zzz"], "approved")
         with pytest.raises(ValueError):
             triage_server.apply_decision(fs, [], "done")
+
+
+class TestHttp:
+    def _start(self, tmp_path):
+        ds = _dataset(tmp_path)
+        p = str(tmp_path / "f.jsonl")
+        findings_io.save_findings(p, [
+            _finding("a", "first_name_man_org.csv", "あきお,akio,明男,風雅", "remove_kanji", "風雅"),
+            _finding("b", "first_name_man_org.csv", "あきお,akio,明男,風雅", "remove_kanji", "明男"),
+        ])
+        srv = triage_server.make_server(p, ds, port=0)
+        t = threading.Thread(target=srv.serve_forever, daemon=True)
+        t.start()
+        return srv, p
+
+    def _req(self, srv, method, path, body=None):
+        conn = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=5)
+        payload = json.dumps(body).encode("utf-8") if body is not None else None
+        conn.request(method, path, body=payload, headers={"Content-Type": "application/json"})
+        resp = conn.getresponse()
+        data = resp.read().decode("utf-8")
+        conn.close()
+        return resp.status, data
+
+    def test_items_and_decide(self, tmp_path):
+        srv, p = self._start(tmp_path)
+        try:
+            status, data = self._req(srv, "GET", "/api/items")
+            assert status == 200
+            body = json.loads(data)
+            assert body["counts"]["pending"] == 2
+            assert body["items"][0]["signals"][0]["type"] == "dup_elsewhere"
+            status, data = self._req(srv, "POST", "/api/decide", {"ids": ["a"], "status": "approved"})
+            assert status == 200 and json.loads(data)["counts"]["approved"] == 1
+            assert findings_io.load_findings(p)[0]["status"] == "approved"
+            status, _ = self._req(srv, "POST", "/api/decide", {"ids": ["zzz"], "status": "approved"})
+            assert status == 400
+            status, data = self._req(srv, "GET", "/")
+            assert status == 200 and "<html" in data.lower()
+        finally:
+            srv.shutdown()

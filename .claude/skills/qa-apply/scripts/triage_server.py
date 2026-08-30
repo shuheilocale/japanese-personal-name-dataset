@@ -128,3 +128,100 @@ def save_atomic(path, findings):
     tmp = path + ".tmp"
     findings_io.save_findings(tmp, findings)
     os.replace(tmp, path)
+
+
+UI_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "triage_ui.html")
+
+
+class TriageState(object):
+    def __init__(self, findings_path, dataset_dir):
+        # type: (str, str) -> None
+        self.findings_path = findings_path
+        self.findings = findings_io.load_findings(findings_path)
+        self.index = load_dataset_index(dataset_dir)
+
+    def items_payload(self):
+        # type: () -> dict
+        return {"items": build_items(self.findings, self.index),
+                "counts": count_statuses(self.findings)}
+
+    def decide(self, ids, status):
+        # type: (List[str], str) -> dict
+        n = apply_decision(self.findings, ids, status)
+        save_atomic(self.findings_path, self.findings)
+        return {"updated": n, "counts": count_statuses(self.findings)}
+
+
+def make_handler(state):
+    class Handler(BaseHTTPRequestHandler):
+        def _send(self, code, body, content_type="application/json; charset=utf-8"):
+            data = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False).encode("utf-8")
+            self.send_response(code)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_GET(self):
+            if self.path == "/" or self.path.startswith("/?"):
+                with open(UI_PATH, "rb") as f:
+                    self._send(200, f.read(), "text/html; charset=utf-8")
+            elif self.path == "/api/items":
+                self._send(200, state.items_payload())
+            else:
+                self._send(404, {"error": "not found"})
+
+        def do_POST(self):
+            if self.path != "/api/decide":
+                self._send(404, {"error": "not found"})
+                return
+            length = int(self.headers.get("Content-Length", "0"))
+            try:
+                body = json.loads(self.rfile.read(length).decode("utf-8"))
+                result = state.decide(list(body.get("ids", [])), body.get("status", ""))
+            except (ValueError, KeyError, TypeError) as e:
+                self._send(400, {"error": str(e)})
+                return
+            self._send(200, result)
+
+        def log_message(self, fmt, *args):  # 静かにする
+            pass
+
+    return Handler
+
+
+def make_server(findings_path, dataset_dir, port=0):
+    # type: (str, str, int) -> ThreadingHTTPServer
+    state = TriageState(findings_path, dataset_dir)
+    return ThreadingHTTPServer(("127.0.0.1", port), make_handler(state))
+
+
+def _force_utf8_output():
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure") and (stream.encoding or "").lower() not in ("utf-8", "utf8"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
+def main():
+    # type: () -> int
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--findings", required=True)
+    parser.add_argument("--dataset-dir", required=True)
+    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--no-browser", action="store_true")
+    args = parser.parse_args()
+    server = make_server(args.findings, args.dataset_dir, args.port)
+    url = "http://127.0.0.1:%d/" % server.server_address[1]
+    print("トリアージ UI: %s  （Ctrl+C で終了）" % url)
+    if not args.no_browser:
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
+if __name__ == "__main__":
+    _force_utf8_output()
+    sys.exit(main())
