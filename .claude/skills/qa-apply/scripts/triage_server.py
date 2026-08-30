@@ -168,6 +168,8 @@ def make_handler(state):
                     self._send(200, f.read(), "text/html; charset=utf-8")
             elif self.path == "/api/items":
                 self._send(200, state.items_payload())
+            elif self.path == "/favicon.ico":
+                self._send(204, b"", "text/plain; charset=utf-8")
             else:
                 self._send(404, {"error": "not found"})
 

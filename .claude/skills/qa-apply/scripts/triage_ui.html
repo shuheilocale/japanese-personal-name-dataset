@@ -45,6 +45,7 @@
 <script>
 let items = [], rows = [], cur = 0, undo = [];
 const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const SIG_LABEL = s => s.type === 'dup_elsewhere' ? `別読み行にも存在: ${s.readings.join('・')}`
   : s.type === 'suffix_rule' ? `接尾辞「${s.suffix}」は通常「${s.expected}」読み` : '提案読みは既存行と重複';
 
@@ -70,30 +71,31 @@ function filtered() {
 function apply() {
   const f = filtered(); const map = new Map();
   for (const i of f) { const key = i.file + '|' + i.entry; if (!map.has(key)) map.set(key, []); map.get(key).push(i); }
-  rows = [...map.values()]; cur = Math.min(cur, Math.max(rows.length - 1, 0));
+  rows = [...map.values()]; cur = Math.max(0, Math.min(cur, rows.length - 1));
   $('listCount').textContent = `${f.length} 件 / ${rows.length} 行`;
-  $('list').innerHTML = rows.map((g, n) => `<div class="${n === cur ? 'cur' : ''}" data-n="${n}"><span>${g[0].row.reading}</span><span>${g.length}件 ${g.some(i => i.signals.length) ? '⚑' : ''}</span></div>`).join('');
+  $('list').innerHTML = rows.map((g, n) => `<div class="${n === cur ? 'cur' : ''}" data-n="${n}"><span>${esc(g[0].row.reading)}</span><span>${g.length}件 ${g.some(i => i.signals.length) ? '⚑' : ''}</span></div>`).join('');
   $('list').querySelectorAll('div').forEach(d => d.onclick = () => { cur = +d.dataset.n; apply(); });
   renderMain();
 }
 function renderMain() {
   const g = rows[cur]; if (!g) { $('main').innerHTML = '<p>表示する行がありません。</p>'; return; }
   const row = g[0].row, targets = new Set(g.flatMap(i => i.targets));
-  const chips = row.kanji.map(k => `<span class="chip ${targets.has(k) ? 'target' : ''}">${k}</span>`).join('');
+  const chips = row.kanji.map(k => `<span class="chip ${targets.has(k) ? 'target' : ''}">${esc(k)}</span>`).join('');
   const findings = g.map(i => `<div class="finding ${i.status}">
-      <span class="badge ${i.confidence}">${i.confidence}</span><span class="badge">${i.check}</span>
-      <span class="badge">${i.proposed_fix.action} ${i.proposed_fix.value || ''}</span><span class="badge">${i.status}</span>
-      ${i.signals.map(s => `<span class="badge sig">⚑ ${SIG_LABEL(s)}</span>`).join('')}
-      <p>${i.evidence}</p><a href="${i.search_url}" target="_blank">検索</a></div>`).join('');
-  $('main').innerHTML = `<h2>${row.reading} <small>${row.romaji}${row.population ? ' / ' + row.population + '人' : ''}</small> <small>${g[0].file}</small></h2>
+      <span class="badge ${i.confidence}">${esc(i.confidence)}</span><span class="badge">${esc(i.check)}</span>
+      <span class="badge">${esc(i.proposed_fix.action)} ${esc(i.proposed_fix.value || '')}</span><span class="badge">${esc(i.status)}</span>
+      ${i.signals.map(s => `<span class="badge sig">⚑ ${esc(SIG_LABEL(s))}</span>`).join('')}
+      <p>${esc(i.evidence)}</p><a href="${esc(i.search_url)}" target="_blank">検索</a></div>`).join('');
+  $('main').innerHTML = `<h2>${esc(row.reading)} <small>${esc(row.romaji)}${row.population ? ' / ' + esc(row.population) + '人' : ''}</small> <small>${esc(g[0].file)}</small></h2>
     <div>${chips}</div>${findings}
     <div class="keys">a=承認 r=却下 s=保留 u=取り消し j/k=次/前 （この行の ${g.length} 件すべてに適用）</div>`;
   const el = $('list').children[cur]; if (el) el.scrollIntoView({ block: 'nearest' });
 }
 async function decide(ids, status, remember = true) {
-  if (remember) undo.push(ids.map(id => ({ id, prev: items.find(i => i.id === id).status })));
+  const prevEntries = remember ? ids.map(id => ({ id, prev: items.find(i => i.id === id).status })) : null;
   const r = await fetch('/api/decide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, status }) });
   if (!r.ok) { alert('エラー: ' + (await r.text())); return; }
+  if (remember) undo.push(prevEntries);
   const body = await r.json(); renderCounts(body.counts);
   for (const i of items) if (ids.includes(i.id)) i.status = status;
 }
@@ -115,8 +117,8 @@ async function bulk(status) {
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
   if (e.key === 'a') decideRow('approved'); else if (e.key === 'r') decideRow('rejected'); else if (e.key === 's') decideRow('pending');
-  else if (e.key === 'u') undoLast(); else if (e.key === 'j') { cur = Math.min(cur + 1, rows.length - 1); apply(); }
-  else if (e.key === 'k') { cur = Math.max(cur - 1, 0); apply(); }
+  else if (e.key === 'u') undoLast(); else if (e.key === 'j') { if (rows.length) { cur = Math.min(cur + 1, rows.length - 1); apply(); } }
+  else if (e.key === 'k') { if (rows.length) { cur = Math.max(cur - 1, 0); apply(); } }
 });
 for (const id of ['fStatus', 'fCheck', 'fConf', 'fAction', 'fFile', 'fSig']) $(id).onchange = () => { cur = 0; apply(); };
 $('bulkApprove').onclick = () => bulk('approved'); $('bulkReject').onclick = () => bulk('rejected');

@@ -149,6 +149,14 @@ class TestHttp:
         finally:
             srv.shutdown()
 
+    def test_favicon_no_content(self, tmp_path):
+        srv, _ = self._start(tmp_path)
+        try:
+            status, data = self._req(srv, "GET", "/favicon.ico")
+            assert status == 204 and data == ""
+        finally:
+            srv.shutdown()
+
     def test_malformed_content_length(self, tmp_path):
         srv, _ = self._start(tmp_path)
         try:
