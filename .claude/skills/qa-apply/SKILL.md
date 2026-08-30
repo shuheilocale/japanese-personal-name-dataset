@@ -21,17 +21,38 @@ python3 .claude/skills/qa-apply/scripts/triage_server.py \
   --dataset-dir japanese_personal_name_dataset/dataset
 ```
 
-行単位でキー操作（a=承認 / r=却下 / s=保留 / u=取り消し / j,k=移動）。左のフィルタで絞り込み、「表示中を一括承認/却下」で同種の疑義をまとめて処理できる。客観シグナル（別読み行に同一漢字あり・接尾辞ルール違反・提案読みの重複）が ⚑ で表示される。判断後はこのスキルの手順で適用する。
+行単位でキー操作（a=承認 / r=却下 / s=保留 / u=取り消し / j,k=移動）。左のフィルタで絞り込み、「表示中を一括承認/却下」で同種の疑義をまとめて処理できる（applied は対象外）。客観シグナル（別読み行に同一漢字あり・接尾辞ルール違反・提案読みの重複・対象漢字が行に無い・entry が現行行と不一致）が ⚑ で表示される。判断後はこのスキルの手順で適用する。
+
+**UI で判断した場合は /qa-apply の `--from-report` を付けない。** `--from-report` は古いレポートの
+チェック `[x]` を見て pending を approved に昇格させるため、UI で却下・保留にした finding が
+再承認されてしまう。判断の唯一の情報源は findings JSONL の status とする。
+
+### 適用前の再ベース（stale な entry を現行行へ揃える）
+
+findings の `entry` は検出時点の行そのものであり、その後の適用で行が変わると
+apply_findings.py は「行が見つかりません」でスキップする。適用前に以下を実行し、
+キー（名: 読み / 姓: 漢字）が一意に一致する現行行へ `entry` を揃える。
+`--reopen-unapplied` を付けると、applied なのに対象漢字が行に残っている remove_kanji
+（複数漢字 value の旧バグ等）を approved に戻し、evidence に再オープンの記録を残す。
+まず `--dry-run` で件数（再ベース / 再オープン / 未解決）を確認し、ユーザーに提示してから書き込む:
+
+```bash
+python3 .claude/skills/qa-apply/scripts/rebase_findings.py \
+  --findings qa/findings/<run-id>.jsonl \
+  --dataset-dir japanese_personal_name_dataset/dataset \
+  --dry-run --reopen-unapplied
+```
 
 ## 手順
 
-1. 対象の findings ファイルを確認し、dry-run で適用予定を提示する:
+1. 対象の findings ファイルを確認し、dry-run で適用予定を提示する
+   （`--from-report` はレポートのチェックで承認する場合のみ。UI で判断した場合は付けない）:
    ```bash
    python3 .claude/skills/qa-apply/scripts/apply_findings.py \
      --findings qa/findings/<run-id>.jsonl \
      --dataset-dir japanese_personal_name_dataset/dataset \
      --qa-dir qa \
-     --from-report qa/reports/<run-id>.md --dry-run
+     [--from-report qa/reports/<run-id>.md] --dry-run
    ```
 2. 適用予定（件数・内容）をユーザーに提示し、**明示承認を得る**。
 3. ブランチを切る: `git checkout -b qa/apply-<run-id>`

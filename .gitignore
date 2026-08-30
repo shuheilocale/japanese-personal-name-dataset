@@ -166,3 +166,6 @@ cython_debug/
 
 # QA レビューの一時作業ファイル（バッチ・サブエージェント結果）
 qa/work/
+
+# Playwright MCP のセッション成果物（トリアージ UI の手動スモーク）
+.playwright-mcp/
