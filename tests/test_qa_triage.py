@@ -79,6 +79,20 @@ class TestSignals:
         g = _finding("b", "first_name_man_org.csv", "あきお,akio,明男", "fix_reading", "あきひこ")
         assert not [s for s in triage_server.compute_signals(g, idx) if s["type"] == "fix_reading_dup"]
 
+    def test_fix_reading_dup_suppressed_for_last_name(self, tmp_path):
+        # 姓CSVでは「同じ読みの別の姓」が正当なため、fix_reading_dup は出さない。
+        ds = _dataset(tmp_path)
+        with open(os.path.join(ds, "last_name_org.csv"), "w", encoding="utf-8") as f:
+            f.write("佐藤,1887000,さとう,satou\n鈴木,1730000,すずき,suzuki\n")
+        idx = triage_server.load_dataset_index(ds)
+        f = _finding("a", "last_name_org.csv", "鈴木,1730000,すずき,suzuki", "fix_reading", "さとう")
+        assert "fix_reading_dup" not in _types(triage_server.compute_signals(f, idx))
+
+    def test_fix_reading_dup_still_shown_for_first_name(self, tmp_path):
+        idx = triage_server.load_dataset_index(_dataset(tmp_path))
+        f = _finding("a", "first_name_man_org.csv", "あきお,akio,明男", "fix_reading", "あきら")
+        assert "fix_reading_dup" in _types(triage_server.compute_signals(f, idx))
+
     def test_multi_kanji_value_signals_per_kanji(self, tmp_path):
         # "克真, 克麻, 勝真" のような複数漢字 value は漢字ごとに判定する。
         idx = triage_server.load_dataset_index(_dataset(tmp_path))

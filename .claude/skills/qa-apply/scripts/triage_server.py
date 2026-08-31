@@ -132,7 +132,8 @@ def compute_signals(finding, index):
         missing = [k for k in targets if k not in row["kanji"]]
         if missing:
             signals.append({"type": "value_not_in_row", "kanji": missing})
-    if action == "fix_reading" and value in info["readings"]:
+    if (action == "fix_reading" and finding["file"] in FIRST_NAME_FILES
+            and value in info["readings"]):
         signals.append({"type": "fix_reading_dup"})
     if known_file and finding["entry"] not in info["rows"]:
         signals.append({"type": "entry_stale",
