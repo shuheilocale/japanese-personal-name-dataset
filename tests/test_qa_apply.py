@@ -285,3 +285,142 @@ class TestApply:
         result = apply_findings.apply(fp, ds, str(tmp_path / "qa"),
                                       report_path=str(report))
         assert result["applied"] == 1
+
+    def test_fix_reading_merges_into_existing_row(self, tmp_path):
+        # 変更後の読みと同じ読みの行が既に存在する場合、漢字をマージして
+        # 元の行は消える。ローマ字は既存行のものを維持する。
+        ds = _write_dataset(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [
+            _finding("first_name_man_org.csv", "かおる,kaoru,薫", "fix_reading", "あい",
+                     check="romaji_reading_mismatch"),
+        ])
+        result = apply_findings.apply(fp, ds, str(tmp_path / "qa"))
+        assert result["applied"] == 1
+        content = open(os.path.join(ds, "first_name_man_org.csv"),
+                       encoding="utf-8").read()
+        assert "あい,ai,藍,愛,薫\n" in content
+        assert "かおる" not in content
+        statuses = [d["status"] for d in findings_io.load_findings(fp)]
+        assert statuses == ["applied"]
+
+    def test_fix_reading_merge_dedupes_overlapping_kanji(self, tmp_path):
+        # マージ先に既にある漢字は重複追加されない。
+        ds = tmp_path / "dataset"
+        ds.mkdir()
+        (ds / "first_name_man_org.csv").write_text(
+            "あい,ai,藍,愛\nめぐみ,megumi,愛\n", encoding="utf-8")
+        (ds / "first_name_woman_org.csv").write_text("さくら,sakura,桜\n", encoding="utf-8")
+        (ds / "last_name_org.csv").write_text("佐藤,1887000,さとう,satou\n", encoding="utf-8")
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [
+            _finding("first_name_man_org.csv", "めぐみ,megumi,愛", "fix_reading", "あい"),
+        ])
+        result = apply_findings.apply(fp, str(ds), str(tmp_path / "qa"))
+        assert result["applied"] == 1
+        content = open(os.path.join(str(ds), "first_name_man_org.csv"),
+                       encoding="utf-8").read()
+        assert content == "あい,ai,藍,愛\n"
+
+    def test_fix_reading_without_existing_row_behaves_as_before(self, tmp_path):
+        # 変更後の読みと同じ読みの行が無い場合は、従来どおり読みを書き換えるだけ。
+        ds = _write_dataset(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [
+            _finding("first_name_man_org.csv", "かおる,kaoru,薫", "fix_reading", "かをる"),
+        ])
+        result = apply_findings.apply(fp, ds, str(tmp_path / "qa"))
+        assert result["applied"] == 1
+        content = open(os.path.join(ds, "first_name_man_org.csv"),
+                       encoding="utf-8").read()
+        assert "かをる,kaoru,薫\n" in content
+        assert "かおる" not in content
+
+    def test_move_to_file_merges_into_existing_row(self, tmp_path):
+        # 移動先に同じ読みの行が既にある場合、新規行を挿入せず既存行へ漢字をマージする。
+        ds = tmp_path / "dataset"
+        ds.mkdir()
+        (ds / "first_name_man_org.csv").write_text("さくら,sakura,咲良\n", encoding="utf-8")
+        (ds / "first_name_woman_org.csv").write_text("さくら,sakura,桜\n", encoding="utf-8")
+        (ds / "last_name_org.csv").write_text("佐藤,1887000,さとう,satou\n", encoding="utf-8")
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [
+            _finding("first_name_man_org.csv", "さくら,sakura,咲良", "move_to_file",
+                     "first_name_woman_org.csv", check="wrong_gender_file"),
+        ])
+        result = apply_findings.apply(fp, str(ds), str(tmp_path / "qa"))
+        assert result["applied"] == 1
+        man = open(os.path.join(str(ds), "first_name_man_org.csv"), encoding="utf-8").read()
+        woman = open(os.path.join(str(ds), "first_name_woman_org.csv"), encoding="utf-8").read()
+        assert man == ""
+        # 移動先に新規行が増えず、既存行に漢字がマージされる（ローマ字は既存を維持）
+        assert woman == "さくら,sakura,桜,咲良\n"
+
+    def test_fix_reading_merge_composite_evolution(self, tmp_path):
+        # 2件の fix_reading が同じ既存行へ順にマージされ、さらにその既存行の
+        # 元テキストを対象とする別findingも、完全マージ後の行に正しく適用される
+        # （evolution マップの整合性）。
+        ds = _write_dataset(tmp_path)
+        (tmp_path / "dataset" / "first_name_man_org.csv").write_text(
+            "あい,ai,藍\nかおる,kaoru,薫\nまみ,mami,真美\nみちる,michiru,美知留\n",
+            encoding="utf-8")
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [
+            _finding("first_name_man_org.csv", "まみ,mami,真美", "fix_reading", "あい"),
+            _finding("first_name_man_org.csv", "みちる,michiru,美知留", "fix_reading", "あい"),
+            _finding("first_name_man_org.csv", "あい,ai,藍", "fix_romaji", "ai2"),
+        ])
+        result = apply_findings.apply(fp, ds, str(tmp_path / "qa"))
+        assert result["applied"] == 3
+        assert result["skipped"] == []
+        content = open(os.path.join(ds, "first_name_man_org.csv"),
+                       encoding="utf-8").read()
+        assert "あい,ai2,藍,真美,美知留\n" in content
+        assert "まみ" not in content
+        assert "みちる" not in content
+        statuses = [d["status"] for d in findings_io.load_findings(fp)]
+        assert statuses == ["applied", "applied", "applied"]
+
+    def test_fix_reading_on_last_name_does_not_merge(self, tmp_path):
+        # 姓CSVでは「同じ読みの別の姓」が正当なため、マージせず従来どおり単純書き換え。
+        ds = tmp_path / "dataset"
+        ds.mkdir()
+        (ds / "first_name_man_org.csv").write_text("かおる,kaoru,薫\n", encoding="utf-8")
+        (ds / "first_name_woman_org.csv").write_text("さくら,sakura,桜\n", encoding="utf-8")
+        (ds / "last_name_org.csv").write_text(
+            "佐藤,1887000,さとう,satou\n鈴木,1730000,すずき,suzuki\n", encoding="utf-8")
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [
+            _finding("last_name_org.csv", "鈴木,1730000,すずき,suzuki", "fix_reading",
+                     "さとう", check="romaji_reading_mismatch"),
+        ])
+        result = apply_findings.apply(fp, str(ds), str(tmp_path / "qa"))
+        assert result["applied"] == 1
+        content = open(os.path.join(str(ds), "last_name_org.csv"),
+                       encoding="utf-8").read()
+        assert content == "佐藤,1887000,さとう,satou\n鈴木,1730000,さとう,suzuki\n"
+
+    def test_dry_run_shows_merge_note_for_fix_reading(self, tmp_path, capsys):
+        ds = _write_dataset(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [
+            _finding("first_name_man_org.csv", "かおる,kaoru,薫", "fix_reading", "あい"),
+        ])
+        apply_findings.apply(fp, ds, str(tmp_path / "qa"), dry_run=True)
+        out = capsys.readouterr().out
+        assert "（既存行 あい に統合）" in out
+
+    def test_dry_run_shows_merge_note_for_move_to_file(self, tmp_path, capsys):
+        ds = tmp_path / "dataset"
+        ds.mkdir()
+        (ds / "first_name_man_org.csv").write_text("さくら,sakura,咲良\n", encoding="utf-8")
+        (ds / "first_name_woman_org.csv").write_text("さくら,sakura,桜\n", encoding="utf-8")
+        (ds / "last_name_org.csv").write_text("佐藤,1887000,さとう,satou\n", encoding="utf-8")
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [
+            _finding("first_name_man_org.csv", "さくら,sakura,咲良", "move_to_file",
+                     "first_name_woman_org.csv"),
+        ])
+        apply_findings.apply(fp, str(ds), str(tmp_path / "qa"), dry_run=True)
+        out = capsys.readouterr().out
+        assert "（既存行 さくら に統合）" in out

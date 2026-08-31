@@ -43,31 +43,79 @@ def _write_lines(path, lines):
 _LAST_NAME_FILE = "last_name_org.csv"
 
 
+def _find_duplicate_row(lines, reading, exclude_idx=None):
+    # type: (list, str, int) -> object
+    """`reading`（col0）と同じ読みを持つ行の index を返す（exclude_idx は除外）。
+
+    無ければ None。
+    """
+    for i, ln in enumerate(lines):
+        if i == exclude_idx:
+            continue
+        if ln.split(",", 1)[0] == reading:
+            return i
+    return None
+
+
+def _merge_kanji_cols(existing_cols, new_kanji):
+    # type: (list, list) -> list
+    """既存行（読み,ローマ字,漢字...）に無い漢字だけを末尾追加する。
+
+    読み・ローマ字は既存行のものを維持する。
+    """
+    merged = list(existing_cols[2:])
+    for k in new_kanji:
+        if k not in merged:
+            merged.append(k)
+    return existing_cols[:2] + merged
+
+
+def _propagate_merge(evolution, fname, old_line, new_line):
+    # type: (dict, str, str, str) -> None
+    """マージ先の既存行が変化したことを evolution マップへ反映する。
+
+    マージ先行が既に他の finding の適用対象として追跡されている場合は
+    その進化系列を更新する。まだ追跡されていない場合でも、後続の finding が
+    マージ前のテキストを entry として参照できるようキーを追加しておく。
+    """
+    for k, v in list(evolution.items()):
+        if k[0] == fname and v == old_line:
+            evolution[k] = new_line
+    evolution[(fname, old_line)] = new_line
+
+
 def _apply_one(lines, finding, current_entry):
     # type: (list, dict, str) -> tuple
-    """1件適用し (新lines, 移動行 or None, 成功か, 適用後の行 or None, 失敗理由 or None) を返す。
+    """1件適用し (新lines, 移動行 or None, 成功か, 適用後の行 or None,
+    失敗理由 or None, マージ更新情報 or None) を返す。
 
     current_entry は元の finding["entry"] そのもの、または同一行に対する
     それより前の承認済み finding 適用後の行（進化形）。remove_row /
-    move_to_file 適用後は行が消えるため呼び出し側は None を渡す。
+    move_to_file 適用後、および fix_reading が既存行へマージされた場合は
+    行が消えるため呼び出し側は None を渡す。
+
+    マージ更新情報は (マージ先の適用前の行, マージ後の行) のタプルで、
+    呼び出し側が evolution マップへ反映するために使う。
 
     名CSV（ひらがな,ローマ字,漢字...）と姓CSV（last_name_org.csv:
     漢字,推定人数,ひらがな,ローマ字）とでは列レイアウトが異なるため、
     fix_romaji / fix_reading で書き換える列インデックスを file で切り替える。
     remove_kanji は姓CSVでは概念が存在しないため常にスキップする。
+    fix_reading のマージ統合は名CSVのみ（姓CSVは同じ読みの別の姓が
+    正当なため従来どおり単純書き換え）。
     """
     action = finding["proposed_fix"]["action"]
     value = finding["proposed_fix"].get("value", "")
     is_last_name = finding["file"] == _LAST_NAME_FILE
     if action == "remove_kanji" and is_last_name:
-        return lines, None, False, current_entry, "remove_kanji は姓CSVでは非対応です"
+        return lines, None, False, current_entry, "remove_kanji は姓CSVでは非対応です", None
     if current_entry is None or current_entry not in lines:
-        return lines, None, False, current_entry, "行が見つかりません"
+        return lines, None, False, current_entry, "行が見つかりません", None
     idx = lines.index(current_entry)
     if action == "remove_row":
-        return lines[:idx] + lines[idx + 1:], None, True, None, None
+        return lines[:idx] + lines[idx + 1:], None, True, None, None, None
     if action == "move_to_file":
-        return lines[:idx] + lines[idx + 1:], current_entry, True, None, None
+        return lines[:idx] + lines[idx + 1:], current_entry, True, None, None, None
     cols = current_entry.split(",")
     if action == "remove_kanji":
         targets = set(_split_values(value))
@@ -75,12 +123,46 @@ def _apply_one(lines, finding, current_entry):
     elif action == "fix_romaji":
         cols[3 if is_last_name else 1] = value
     elif action == "fix_reading":
+        if not is_last_name:
+            dup_idx = _find_duplicate_row(lines, value, exclude_idx=idx)
+            if dup_idx is not None:
+                old_target_line = lines[dup_idx]
+                merged_entry = ",".join(_merge_kanji_cols(
+                    old_target_line.split(","), cols[2:]))
+                lines[dup_idx] = merged_entry
+                del lines[idx]
+                return (lines, None, True, None, None,
+                        (old_target_line, merged_entry))
         cols[2 if is_last_name else 0] = value
     elif action == "none":
-        return lines, None, True, current_entry, None
+        return lines, None, True, current_entry, None, None
     new_entry = ",".join(cols)
     lines[idx] = new_entry
-    return lines, None, True, new_entry, None
+    return lines, None, True, new_entry, None, None
+
+
+def _preview_merge_note(file_lines, action, value, fname, current_entry, dataset_dir):
+    # type: (dict, str, str, str, str, str) -> str
+    """dry-run 表示用に、この適用が既存行へのマージになる場合の付記を返す。
+
+    fix_reading（名CSVのみ）は変更後の読み、move_to_file は移動元の読みで
+    移動先ファイルの既存行を探す。マージにならない場合は空文字列。
+    """
+    lines = file_lines.get(fname, [])
+    if current_entry is None or current_entry not in lines:
+        return ""
+    if action == "fix_reading" and fname != _LAST_NAME_FILE:
+        idx = lines.index(current_entry)
+        if _find_duplicate_row(lines, value, exclude_idx=idx) is not None:
+            return "（既存行 %s に統合）" % value
+    elif action == "move_to_file":
+        target = value
+        if target not in file_lines:
+            file_lines[target] = _read_lines(os.path.join(dataset_dir, target))
+        reading = current_entry.split(",")[0]
+        if _find_duplicate_row(file_lines[target], reading) is not None:
+            return "（既存行 %s に統合）" % reading
+    return ""
 
 
 def apply(findings_path, dataset_dir, qa_dir, report_path=None, dry_run=False):
@@ -108,13 +190,15 @@ def apply(findings_path, dataset_dir, qa_dir, report_path=None, dry_run=False):
         fname = d["file"]
         action = d["proposed_fix"]["action"]
         value = d["proposed_fix"].get("value", "")
-        print("適用予定: id=%s action=%s value=%s file=%s"
-              % (d["id"], action, value or "(なし)", fname))
         if fname not in file_lines:
             file_lines[fname] = _read_lines(os.path.join(dataset_dir, fname))
         key = (fname, d["entry"])
         current_entry = evolution.get(key, d["entry"])
-        new_lines, moved, ok, new_entry, reason = _apply_one(
+        merge_note = _preview_merge_note(file_lines, action, value,
+                                          fname, current_entry, dataset_dir)
+        print("適用予定: id=%s action=%s value=%s file=%s%s"
+              % (d["id"], action, value or "(なし)", fname, merge_note))
+        new_lines, moved, ok, new_entry, reason, merge_update = _apply_one(
             file_lines[fname], d, current_entry)
         if not ok:
             skipped.append(d["id"])
@@ -122,6 +206,8 @@ def apply(findings_path, dataset_dir, qa_dir, report_path=None, dry_run=False):
             continue
         file_lines[fname] = new_lines
         evolution[key] = new_entry
+        if merge_update is not None:
+            _propagate_merge(evolution, fname, merge_update[0], merge_update[1])
         if moved is not None:
             moves.append((d["proposed_fix"]["value"], moved))
         d["status"] = "applied"
@@ -129,9 +215,18 @@ def apply(findings_path, dataset_dir, qa_dir, report_path=None, dry_run=False):
     for target, raw in moves:
         if target not in file_lines:
             file_lines[target] = _read_lines(os.path.join(dataset_dir, target))
-        keys = [ln.split(",")[0] for ln in file_lines[target]]
-        pos = bisect.bisect_left(keys, raw.split(",")[0])
-        file_lines[target].insert(pos, raw)
+        reading = raw.split(",")[0]
+        dup_idx = _find_duplicate_row(file_lines[target], reading)
+        if dup_idx is not None:
+            old_target_line = file_lines[target][dup_idx]
+            merged_entry = ",".join(_merge_kanji_cols(
+                old_target_line.split(","), raw.split(",")[2:]))
+            file_lines[target][dup_idx] = merged_entry
+            _propagate_merge(evolution, target, old_target_line, merged_entry)
+        else:
+            keys = [ln.split(",")[0] for ln in file_lines[target]]
+            pos = bisect.bisect_left(keys, reading)
+            file_lines[target].insert(pos, raw)
     rejected = [d for d in findings if d["status"] == "rejected"]
     if not dry_run:
         for fname, lines in file_lines.items():
