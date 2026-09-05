@@ -140,6 +140,7 @@ OSS支援プログラム申請書（2026-07-19）に記した構想——「継�
 - `check` の語彙: `format_error` / `romaji_reading_mismatch` / `kanji_reading_mismatch` / `not_a_name` / `wrong_gender_file` / `duplicate` / `cross_file_inconsistency`
 - `proposed_fix.action` の語彙: `remove_row` / `remove_kanji` / `fix_romaji` / `fix_reading` / `move_to_file` / `none`（人間判断のみ）
 - `status` の遷移: `pending → approved | rejected`、`approved → applied`
+- Phase 2 での拡張（`missing_entry` / `add_row` / `add_kanji` / `sources`）は `2026-09-05-update-pipeline-design.md` §5 を参照
 - 決定的チェックの findings も同スキーマで出力できるが、通常は CI のエラー表示で完結させ、台帳には LLM 判定のみ記録する。
 
 ## 6. エラーハンドリングと安全策
