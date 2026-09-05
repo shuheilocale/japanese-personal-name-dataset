@@ -196,7 +196,7 @@ class TestApply:
         findings_io.append_findings(fp, [
             _finding("first_name_man_org.csv", "あい,ai,藍,愛", "remove_kanji", "愛",
                      check="kanji_reading_mismatch"),
-            _finding("first_name_man_org.csv", "あい,ai,藍,愛", "fix_romaji", "ai2",
+            _finding("first_name_man_org.csv", "あい,ai,藍,愛", "fix_romaji", "aix",
                      check="romaji_reading_mismatch"),
         ])
         result = apply_findings.apply(fp, ds, str(tmp_path / "qa"))
@@ -204,7 +204,7 @@ class TestApply:
         content = open(os.path.join(ds, "first_name_man_org.csv"),
                        encoding="utf-8").read()
         assert "愛" not in content
-        assert "あい,ai2,藍\n" in content
+        assert "あい,aix,藍\n" in content
         statuses = [d["status"] for d in findings_io.load_findings(fp)]
         assert statuses == ["applied", "applied"]
 
@@ -368,14 +368,14 @@ class TestApply:
         findings_io.append_findings(fp, [
             _finding("first_name_man_org.csv", "まみ,mami,真美", "fix_reading", "あい"),
             _finding("first_name_man_org.csv", "みちる,michiru,美知留", "fix_reading", "あい"),
-            _finding("first_name_man_org.csv", "あい,ai,藍", "fix_romaji", "ai2"),
+            _finding("first_name_man_org.csv", "あい,ai,藍", "fix_romaji", "aix"),
         ])
         result = apply_findings.apply(fp, ds, str(tmp_path / "qa"))
         assert result["applied"] == 3
         assert result["skipped"] == []
         content = open(os.path.join(ds, "first_name_man_org.csv"),
                        encoding="utf-8").read()
-        assert "あい,ai2,藍,真美,美知留\n" in content
+        assert "あい,aix,藍,真美,美知留\n" in content
         assert "まみ" not in content
         assert "みちる" not in content
         statuses = [d["status"] for d in findings_io.load_findings(fp)]
