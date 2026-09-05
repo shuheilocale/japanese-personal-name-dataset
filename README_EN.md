@@ -12,8 +12,8 @@ A comprehensive dataset of Japanese personal names (first names and last names) 
 
 ## Features
 
-- 5,638 male first names (702 optimized/popular names)
-- 3,339 female first names (241 optimized/popular names)
+- 5,578 male first names (702 optimized/popular names)
+- 3,294 female first names (241 optimized/popular names)
 - 2,000 last names with estimated population data
 - Multiple kanji variations for each reading
 - Romaji (Hepburn) transliterations
@@ -165,9 +165,9 @@ if is_valid_name('太郎', 'たろう'):
 
 | Type | Count |
 |------|-------|
-| Male first names (original) | 5,638 |
+| Male first names (original) | 5,578 |
 | Male first names (optimized) | 702 |
-| Female first names (original) | 3,339 |
+| Female first names (original) | 3,294 |
 | Female first names (optimized) | 241 |
 | Last names | 1,999 |
 

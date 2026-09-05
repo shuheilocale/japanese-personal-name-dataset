@@ -130,3 +130,19 @@ class TestVerifiedCache:
         raw = open(p, "rb").read()
         assert b"\r\n" not in raw
         assert "abc" in findings_io.load_verified(p)
+
+
+class TestValueFormat:
+    def test_value_format_rules(self):
+        base = _valid_finding()
+        for action, bad in [("fix_reading", "みむら,mimura"), ("fix_reading", "しゅんにち（かすが）"),
+                            ("fix_romaji", "たちばな,tachibana"), ("fix_romaji", "mimura, sanson"),
+                            ("remove_kanji", "")]:
+            f = dict(base)
+            f["proposed_fix"] = {"action": action, "value": bad}
+            assert findings_io.validate_finding(f), (action, bad)
+        for action, ok in [("fix_reading", "みむら"), ("fix_romaji", "mimura"), ("fix_romaji", "ken'ichi"),
+                           ("remove_kanji", "克真, 克麻"), ("remove_row", ""), ("none", "")]:
+            f = dict(base)
+            f["proposed_fix"] = {"action": action, "value": ok}
+            assert findings_io.validate_finding(f) == [], (action, ok)

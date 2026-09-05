@@ -6,6 +6,7 @@ Phase 2 の更新パイプラインと共有する安定契約なので、変更
 import hashlib
 import json
 import os
+import re
 from typing import Dict, List
 
 CHECK_TYPES = {
@@ -28,6 +29,9 @@ MOVE_TARGET_FILES = {
     "first_name_man_org.csv", "first_name_man_opti.csv",
     "first_name_woman_org.csv", "first_name_woman_opti.csv",
 }
+
+_FIX_READING_RE = re.compile(r"^[ぁ-ゖー]+$")
+_FIX_ROMAJI_RE = re.compile(r"^[a-z\-']+$")
 
 _REQUIRED = [
     "id", "file", "entry", "check", "severity", "confidence",
@@ -69,6 +73,14 @@ def validate_finding(d):
     elif fix["action"] == "move_to_file" and fix.get("value") not in MOVE_TARGET_FILES:
         problems.append(
             "move_to_file の移動先が不正です（名ファイルのみ許可）: %r" % fix.get("value"))
+    else:
+        value = fix.get("value", "")
+        if fix["action"] == "fix_reading" and not _FIX_READING_RE.match(value or ""):
+            problems.append("fix_reading の value はひらがなのみ（カンマ・説明文は不可）: %r" % value)
+        if fix["action"] == "fix_romaji" and not _FIX_ROMAJI_RE.match(value or ""):
+            problems.append("fix_romaji の value はローマ字のみ（カンマ・説明文は不可）: %r" % value)
+        if fix["action"] == "remove_kanji" and not (value or "").strip():
+            problems.append("remove_kanji の value が空です")
     return problems
 
 
