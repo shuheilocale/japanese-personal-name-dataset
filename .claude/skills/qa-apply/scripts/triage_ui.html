@@ -15,6 +15,7 @@
   main { overflow: auto; padding: 16px 24px; }
   .chip { display: inline-block; padding: 2px 8px; margin: 2px; border: 1px solid #cbd5e1; border-radius: 12px; font-size: 15px; }
   .chip.target { border-color: #dc2626; color: #dc2626; text-decoration: line-through; background: #fef2f2; }
+  .chip.add { border-color: #16a34a; color: #166534; background: #f0fdf4; }
   .finding { border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; margin: 10px 0; }
   .finding.approved { border-color: #16a34a; background: #f0fdf4; }
   .finding.rejected { border-color: #9ca3af; background: #f9fafb; opacity: .7; }
@@ -39,7 +40,7 @@
   <label>confidence <select id="fConf"><option value="">all</option><option>high</option><option>medium</option><option>low</option></select></label>
   <label>action <select id="fAction"><option value="">all</option></select></label>
   <label>file <select id="fFile"><option value="">all</option></select></label>
-  <label>signal <select id="fSig"><option value="">all</option><option value="dup_elsewhere">dup_elsewhere</option><option value="suffix_rule">suffix_rule</option><option value="fix_reading_dup">fix_reading_dup</option><option value="value_not_in_row">value_not_in_row</option><option value="entry_stale">entry_stale</option><option value="none">なし</option></select></label>
+  <label>signal <select id="fSig"><option value="">all</option><option value="dup_elsewhere">dup_elsewhere</option><option value="suffix_rule">suffix_rule</option><option value="fix_reading_dup">fix_reading_dup</option><option value="value_not_in_row">value_not_in_row</option><option value="entry_stale">entry_stale</option><option value="source_support">source_support</option><option value="none">なし</option></select></label>
   <div id="listCount"></div>
   <div id="list"></div>
 </aside>
@@ -57,6 +58,7 @@ const SIG_LABEL = s => {
     case 'fix_reading_dup': return '提案読みは既存行と重複';
     case 'value_not_in_row': return `対象漢字が行に無い: ${s.kanji.join('・')}`;
     case 'entry_stale': return s.current ? `entry が現行行と不一致（現行: ${s.current}）` : 'entry が現行行に無い（同キー行なし/複数）';
+    case 'source_support': return `根拠 ${esc(s.kanji)}: NDL ${s.ndl}人 / Wikidata ${s.wikidata}人 / JMnedict ${s.jmnedict ? '✓' : '-'}`;
     default: return s.type;
   }
 };
@@ -92,14 +94,18 @@ function apply() {
 function renderMain() {
   const g = rows[cur]; if (!g) { $('main').innerHTML = '<p>表示する行がありません。</p>'; return; }
   const row = g[0].row, targets = new Set(g.flatMap(i => i.targets));
-  const chips = row.kanji.map(k => `<span class="chip ${targets.has(k) ? 'target' : ''}">${esc(k)}</span>`).join('');
+  const isAddRow = g[0].proposed_fix.action === 'add_row';
+  const addKanji = g.flatMap(i => i.proposed_fix.action === 'add_kanji'
+    ? String(i.proposed_fix.value || '').split(/[,、]/).map(s => s.trim()).filter(Boolean) : []);
+  const chips = row.kanji.map(k => `<span class="chip ${isAddRow ? 'add' : (targets.has(k) ? 'target' : '')}">${esc(k)}</span>`).join('')
+    + addKanji.map(k => `<span class="chip add">${esc(k)}</span>`).join('');
   const findings = g.map(i => `<div class="finding ${esc(i.status)}">
       <span class="badge ${esc(i.confidence)}">${esc(i.confidence)}</span><span class="badge">${esc(i.check)}</span>
       <span class="badge">${esc(i.proposed_fix.action)} ${esc(i.proposed_fix.value || '')}</span><span class="badge">${esc(i.status)}</span>
       ${i.signals.map(s => `<span class="badge sig ${s.type === 'entry_stale' ? 'stale' : ''}">⚑ ${esc(SIG_LABEL(s))}</span>`).join('')}
       <p>${esc(i.evidence)}</p><a href="${esc(i.search_url)}" target="_blank" rel="noopener">検索</a></div>`).join('');
   const decidable = g.filter(i => DECIDABLE.includes(i.status)).length;
-  $('main').innerHTML = `<h2>${esc(row.reading)} <small>${esc(row.romaji)}${row.population ? ' / ' + esc(row.population) + '人' : ''}</small> <small>${esc(g[0].file)}</small></h2>
+  $('main').innerHTML = `<h2>${esc(row.reading)} <small>${esc(row.romaji)}${row.population ? ' / ' + esc(row.population) + '人' : ''}</small> <small>${esc(g[0].file)}</small>${isAddRow ? ' <span class="badge">追加行</span>' : ''}</h2>
     <div>${chips}</div>${findings}
     <div class="keys">a=承認 r=却下 s=保留 u=取り消し j/k=次/前 （この行の ${decidable} 件に適用${decidable < g.length ? '、applied は対象外' : ''}）</div>`;
   const el = $('list').children[cur]; if (el) el.scrollIntoView({ block: 'nearest' });

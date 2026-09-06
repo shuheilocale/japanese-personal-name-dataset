@@ -17,14 +17,19 @@ from typing import Dict, List
 sys.path.insert(0, os.path.abspath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     os.pardir, os.pardir, "validate-dataset", "scripts")))
+sys.path.insert(0, os.path.abspath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    os.pardir, os.pardir, "qa-update", "scripts")))
 
 import findings_io  # noqa: E402
+import source_index as si  # noqa: E402
 
 FIRST_NAME_FILES = [
     "first_name_man_org.csv", "first_name_man_opti.csv",
     "first_name_woman_org.csv", "first_name_woman_opti.csv",
 ]
 LAST_NAME_FILE = "last_name_org.csv"
+ADD_ACTIONS = ("add_row", "add_kanji")
 SUFFIX_RULES = {
     "郎": "ろう", "朗": "ろう", "彦": "ひこ", "子": "こ", "也": "や", "哉": "や",
     "夫": "お", "雄": "お", "男": "お", "美": "み", "江": "え", "恵": "え", "枝": "え",
@@ -107,8 +112,8 @@ def current_row_for(entry, info):
     return cands[0] if len(cands) == 1 else None
 
 
-def compute_signals(finding, index):
-    # type: (dict, Dict[str, dict]) -> List[dict]
+def compute_signals(finding, index, source_index=None):
+    # type: (dict, Dict[str, dict], object) -> List[dict]
     signals = []  # type: List[dict]
     row = parse_row(finding["file"], finding["entry"])
     action = finding["proposed_fix"]["action"]
@@ -117,27 +122,43 @@ def compute_signals(finding, index):
     known_file = info is not None
     if info is None:
         info = _empty_info()
-    if action == "remove_kanji":
-        targets = split_values(value)
-        for k in targets:
-            others = sorted(info["kanji_index"].get(k, set()) - {row["reading"]})
-            if others:
-                signals.append({"type": "dup_elsewhere", "kanji": k, "readings": others})
-        for k in targets:
-            for suffix, expected in SUFFIX_RULES.items():
-                if k.endswith(suffix) and not row["reading"].endswith(expected):
-                    signals.append({"type": "suffix_rule", "kanji": k,
-                                    "suffix": suffix, "expected": expected})
-                    break
-        missing = [k for k in targets if k not in row["kanji"]]
-        if missing:
-            signals.append({"type": "value_not_in_row", "kanji": missing})
-    if (action == "fix_reading" and finding["file"] in FIRST_NAME_FILES
-            and value in info["readings"]):
-        signals.append({"type": "fix_reading_dup"})
-    if known_file and finding["entry"] not in info["rows"]:
-        signals.append({"type": "entry_stale",
-                        "current": current_row_for(finding["entry"], info)})
+    if action not in ADD_ACTIONS:
+        if action == "remove_kanji":
+            targets = split_values(value)
+            for k in targets:
+                others = sorted(info["kanji_index"].get(k, set()) - {row["reading"]})
+                if others:
+                    signals.append({"type": "dup_elsewhere", "kanji": k, "readings": others})
+            for k in targets:
+                for suffix, expected in SUFFIX_RULES.items():
+                    if k.endswith(suffix) and not row["reading"].endswith(expected):
+                        signals.append({"type": "suffix_rule", "kanji": k,
+                                        "suffix": suffix, "expected": expected})
+                        break
+            missing = [k for k in targets if k not in row["kanji"]]
+            if missing:
+                signals.append({"type": "value_not_in_row", "kanji": missing})
+        if (action == "fix_reading" and finding["file"] in FIRST_NAME_FILES
+                and value in info["readings"]):
+            signals.append({"type": "fix_reading_dup"})
+        if known_file and finding["entry"] not in info["rows"]:
+            signals.append({"type": "entry_stale",
+                            "current": current_row_for(finding["entry"], info)})
+    if source_index is not None:
+        if isinstance(finding.get("sources"), dict):
+            s = finding["sources"]
+            signals.append({
+                "type": "source_support",
+                "kanji": value if action in ("remove_kanji", "add_kanji")
+                else (row["kanji"][0] if row["kanji"] else ""),
+                "ndl": int(s.get("ndl", 0)), "wikidata": int(s.get("wikidata", 0)),
+                "jmnedict": bool(s.get("jmnedict", False))})
+        else:
+            kind = "surname" if finding["file"] == LAST_NAME_FILE else "given"
+            targets = split_values(value) if action == "remove_kanji" else row["kanji"][:1]
+            for k in targets:
+                sup = si.support(source_index, kind, k, row["reading"])
+                signals.append(dict({"type": "source_support", "kanji": k}, **sup))
     return signals
 
 
@@ -148,8 +169,8 @@ def search_url(targets, row):
     return "https://www.google.com/search?q=" + urllib.parse.quote(query)
 
 
-def build_items(findings, index):
-    # type: (List[dict], Dict[str, dict]) -> List[dict]
+def build_items(findings, index, source_index=None):
+    # type: (List[dict], Dict[str, dict], object) -> List[dict]
     items = []
     for d in findings:
         row = parse_row(d["file"], d["entry"])
@@ -159,7 +180,7 @@ def build_items(findings, index):
         item = dict(d)
         item.update({
             "row": row, "targets": targets,
-            "signals": compute_signals(d, index),
+            "signals": compute_signals(d, index, source_index),
             "search_url": search_url(targets, row),
         })
         items.append(item)
@@ -208,17 +229,18 @@ UI_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "triage_ui.ht
 
 
 class TriageState(object):
-    def __init__(self, findings_path, dataset_dir):
-        # type: (str, str) -> None
+    def __init__(self, findings_path, dataset_dir, source_index_path=None):
+        # type: (str, str, object) -> None
         self.findings_path = findings_path
         self.findings = findings_io.load_findings(findings_path)
         self.index = load_dataset_index(dataset_dir)
+        self.source_index = si.load_index(source_index_path) if source_index_path else None
         self._lock = threading.Lock()
 
     def items_payload(self):
         # type: () -> dict
         with self._lock:
-            return {"items": build_items(self.findings, self.index),
+            return {"items": build_items(self.findings, self.index, self.source_index),
                     "counts": count_statuses(self.findings)}
 
     def decide(self, ids, status):
@@ -285,9 +307,9 @@ def make_handler(state):
     return Handler
 
 
-def make_server(findings_path, dataset_dir, port=0):
-    # type: (str, str, int) -> ThreadingHTTPServer
-    state = TriageState(findings_path, dataset_dir)
+def make_server(findings_path, dataset_dir, port=0, source_index_path=None):
+    # type: (str, str, int, object) -> ThreadingHTTPServer
+    state = TriageState(findings_path, dataset_dir, source_index_path)
     return ThreadingHTTPServer(("127.0.0.1", port), make_handler(state))
 
 
@@ -304,9 +326,12 @@ def main():
     parser.add_argument("--dataset-dir", required=True)
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--source-index", default=None,
+                         help="根拠シグナル用の統一索引（例: qa/sources/index.json）")
     args = parser.parse_args()
+    extra = {"source_index_path": args.source_index} if args.source_index else {}
     try:
-        server = make_server(args.findings, args.dataset_dir, args.port)
+        server = make_server(args.findings, args.dataset_dir, args.port, **extra)
     except OSError as e:
         print("ポート %d を使用できません（他のプロセスが使用中の可能性があります。"
               "--port で別のポートを指定してください）: %s" % (args.port, e), file=sys.stderr)

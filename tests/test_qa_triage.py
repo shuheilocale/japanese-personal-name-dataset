@@ -10,6 +10,8 @@ import urllib.parse
 import pytest
 
 import findings_io
+import source_index as si
+import sources_common as sc
 import triage_server
 
 
@@ -148,6 +150,32 @@ class TestSignals:
         idx = triage_server.load_dataset_index(_dataset(tmp_path))
         f = _finding("a", "first_name_man_org.csv", "あきお,akio,明男,風雅", "remove_kanji", "風雅")
         assert "entry_stale" not in _types(triage_server.compute_signals(f, idx))
+
+
+class TestPhase2Signals:
+    def _idx(self, tmp_path):
+        return triage_server.load_dataset_index(_dataset(tmp_path))
+
+    def test_add_actions_have_no_stale_signals(self, tmp_path):
+        idx = self._idx(tmp_path)
+        f = _finding("a", "first_name_man_org.csv", "いつき,itsuki,樹", "add_row", "", check="missing_entry")
+        types = {s["type"] for s in triage_server.compute_signals(f, idx)}
+        assert "entry_stale" not in types and "value_not_in_row" not in types
+
+    def test_source_support_from_index(self, tmp_path):
+        idx = self._idx(tmp_path)
+        src = si.build_index([sc.record("ndl", "given", "風雅", "あきお", count=4)])
+        f = _finding("a", "first_name_man_org.csv", "あきお,akio,明男,風雅", "remove_kanji", "風雅")
+        sig = [s for s in triage_server.compute_signals(f, idx, source_index=src) if s["type"] == "source_support"]
+        assert sig == [{"type": "source_support", "kanji": "風雅", "ndl": 4, "wikidata": 0, "jmnedict": False}]
+
+    def test_source_support_prefers_finding_sources(self, tmp_path):
+        idx = self._idx(tmp_path)
+        f = _finding("a", "first_name_man_org.csv", "いつき,itsuki,樹", "add_row", "", check="missing_entry")
+        f["sources"] = {"ndl": 7, "wikidata": 3, "jmnedict": True}
+        sig = [s for s in triage_server.compute_signals(f, idx, source_index={"pairs": {}, "readings": {}})
+               if s["type"] == "source_support"]
+        assert sig[0]["ndl"] == 7 and sig[0]["jmnedict"] is True
 
 
 class TestDatasetIndex:
