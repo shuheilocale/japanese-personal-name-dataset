@@ -10,6 +10,9 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.abspath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    os.pardir, os.pardir, "validate-dataset", "scripts")))
 
 import findings_io  # noqa: E402
 import generate_candidates as gc  # noqa: E402

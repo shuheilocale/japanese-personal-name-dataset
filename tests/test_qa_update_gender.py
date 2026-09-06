@@ -1,6 +1,8 @@
 """gender_batch.py のテスト。"""
 import json
 import os
+import subprocess
+import sys
 
 import findings_io
 import gender_batch as gb
@@ -45,3 +47,18 @@ def test_unisex_and_unknown(tmp_path):
     fs = findings_io.load_findings(fp)
     assert sorted(f["file"] for f in fs) == ["first_name_man_org.csv", "first_name_woman_org.csv"]
     assert not [f for f in fs if f["entry"].startswith("ひなた")]
+
+
+def test_cli_standalone_help():
+    """conftest の sys.path 注入に頼らず、単体スクリプト実行として --help が動くことを確認する。
+
+    gender_batch.py は findings_io（validate-dataset/scripts）に依存するため、
+    自身で当該ディレクトリを sys.path に追加していないと `python3 gender_batch.py ...`
+    が ModuleNotFoundError で落ちる。subprocess で新しい Python プロセスから実行し、
+    pytest 経由の import では検出できない回帰を捕捉する。
+    """
+    script = os.path.abspath(gb.__file__)
+    for argv in (["--help"], ["prep", "--help"], ["merge", "--help"]):
+        result = subprocess.run([sys.executable, script] + argv,
+                                capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
