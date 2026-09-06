@@ -7,6 +7,7 @@ for _rel in (
     os.path.join(".claude", "skills", "validate-dataset", "scripts"),
     os.path.join(".claude", "skills", "qa-review", "scripts"),
     os.path.join(".claude", "skills", "qa-apply", "scripts"),
+    os.path.join(".claude", "skills", "qa-update", "scripts"),
 ):
     _p = os.path.join(_REPO_ROOT, _rel)
     if _p not in sys.path:
