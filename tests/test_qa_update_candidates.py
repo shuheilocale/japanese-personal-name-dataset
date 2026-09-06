@@ -295,9 +295,33 @@ class TestCarryOverKey:
         assert out["status"] == "approved" and gc.CHANGED_NOTE not in out["evidence"]
 
     def test_key_matches_qa_batch_rule(self):
-        d = _f("x", "pending", entry="e", action="add_kanji", value="v")
+        d = _f("x", "pending", entry="e", action="add_row", value="")
         d["check"] = "missing_entry"
-        assert gc._finding_key(d) == ("x", "missing_entry", "e", "add_kanji", "v")
+        assert gc._finding_key(d) == ("x", "missing_entry", "e", "add_row", "")
+        # add_kanji は提案内容（読み・追加漢字）が id に含まれるので entry をキーから外す
+        k = _f("x", "pending", entry="e", action="add_kanji", value="v")
+        k["check"] = "missing_entry"
+        assert gc._finding_key(k) == ("x", "missing_entry", None, "add_kanji", "v")
+
+    def test_add_kanji_keeps_status_when_only_row_changed(self):
+        # 同じ行に別候補を適用して entry が変わっただけの add_kanji は rejected / approved を維持する
+        # （CHANGED_NOTE で再浮上しない）。
+        rej_old = _f("k", "rejected", entry="けんいち,kenichi,健一", action="add_kanji", value="権市")
+        rej_new = _f("k", "pending", entry="けんいち,kenichi,健一,兼市", action="add_kanji", value="権市",
+                     today="2026-10-01")
+        out = gc.carry_over([rej_new], [rej_old])[0]
+        assert out["status"] == "rejected" and out["detected_at"] == "2026-09-06"
+        assert out["entry"] == "けんいち,kenichi,健一,兼市" and gc.CHANGED_NOTE not in out["evidence"]
+        app_old = _f("a", "approved", entry="けんいち,kenichi,健一", action="add_kanji", value="建市")
+        app_new = _f("a", "pending", entry="けんいち,kenichi,健一,兼市", action="add_kanji", value="建市")
+        assert gc.carry_over([app_new], [app_old])[0]["status"] == "approved"
+
+    def test_add_kanji_value_change_still_resets(self):
+        # value（追加漢字）は id に含まれるので通常は変わらないが、変わればキー不一致として pending に戻る
+        old = _f("k", "rejected", entry="e", action="add_kanji", value="権市")
+        new = _f("k", "pending", entry="e", action="add_kanji", value="建市")
+        out = gc.carry_over([new], [old])[0]
+        assert out["status"] == "pending" and out["evidence"].endswith(gc.CHANGED_NOTE)
 
 
 class TestMergeLedger:
@@ -343,6 +367,61 @@ class TestMergeLedger:
         out = gc.merge_ledger([_f("a", "pending", entry="いつき,itsuki,樹,一樹")], existing)
         assert [d["id"] for d in out] == ["a"]
         assert out[0]["status"] == "pending" and out[0]["entry"] == "いつき,itsuki,樹,一樹"
+
+    def _unregenerated(self):
+        approved = _f("first_name_man_org.csv:けんいち:missing_entry:add_kanji:兼市", "approved",
+                      entry="けんいち,kenichi,健一", action="add_kanji", value="兼市")
+        applied = _f("first_name_woman_org.csv:さくら:missing_entry:add_kanji:咲空", "applied",
+                     entry="さくら,sakura,桜", action="add_kanji", value="咲空", file="first_name_woman_org.csv")
+        rejected = _f("first_name_man_org.csv:けんいち:missing_entry:add_kanji:権市", "rejected",
+                      entry="けんいち,kenichi,健一", action="add_kanji", value="権市")
+        llm_pending = _f("first_name_woman_org.csv:りりあ:missing_entry:add_row", "pending",
+                         entry="りりあ,riria,莉里亜", file="first_name_woman_org.csv")
+        llm_pending["detected_by"] = "qa-update/gender_batch v1"
+        llm_approved = _f("first_name_man_org.csv:りく:missing_entry:add_row", "approved", entry="りく,riku,陸")
+        llm_approved["detected_by"] = "qa-update/gender_batch v1"
+        return [approved, applied, rejected, llm_pending, llm_approved]
+
+    def test_unregenerated_own_approved_is_demoted_to_pending_with_note(self):
+        # 索引更新・閾値上げ・cap 外れで根拠が消えた事前承認は、そのまま適用されないよう pending に戻す。
+        out = gc.merge_ledger([_f("z", "pending", entry="れんと,rento,蓮斗")], self._unregenerated())
+        by_id = {d["id"]: d for d in out}
+        demoted = by_id["first_name_man_org.csv:けんいち:missing_entry:add_kanji:兼市"]
+        assert demoted["status"] == "pending"
+        assert demoted["evidence"] == "NDL 7人 / Wikidata 1人 / JMnedict -" + gc.DROPPED_NOTE
+        assert demoted["detected_at"] == "2026-09-06"
+        # applied / rejected / 他出自（pending・approved とも）は不変
+        assert by_id["first_name_woman_org.csv:さくら:missing_entry:add_kanji:咲空"]["status"] == "applied"
+        assert by_id["first_name_man_org.csv:けんいち:missing_entry:add_kanji:権市"]["status"] == "rejected"
+        assert by_id["first_name_woman_org.csv:りりあ:missing_entry:add_row"]["status"] == "pending"
+        assert by_id["first_name_man_org.csv:りく:missing_entry:add_row"]["status"] == "approved"
+        assert gc.DROPPED_NOTE not in json.dumps([d for d in out if d["id"] != demoted["id"]], ensure_ascii=False)
+        assert [d["id"] for d in out][-1] == "z"
+
+    def test_demoted_finding_is_kept_until_decided_and_stable(self):
+        # 候補外で pending に戻した finding は判断されるまで残り、再実行しても注記は重複しない（バイト一致）。
+        new = lambda: [_f("z", "pending", entry="れんと,rento,蓮斗")]  # noqa: E731
+        first = gc.merge_ledger(new(), self._unregenerated())
+        second = gc.merge_ledger(new(), first)
+        assert json.dumps(first, ensure_ascii=False) == json.dumps(second, ensure_ascii=False)
+        assert "first_name_man_org.csv:けんいち:missing_entry:add_kanji:兼市" in [d["id"] for d in second]
+
+    def test_demoted_finding_regenerated_later_is_normal_pending(self):
+        # 候補に戻れば通常の pending として再生成され、候補外注記は消える。
+        demoted = gc.merge_ledger([], self._unregenerated())[0]
+        assert demoted["status"] == "pending" and demoted["evidence"].endswith(gc.DROPPED_NOTE)
+        regen = _f("first_name_man_org.csv:けんいち:missing_entry:add_kanji:兼市", "pending",
+                   entry="けんいち,kenichi,健一", action="add_kanji", value="兼市", today="2026-10-01")
+        out = gc.merge_ledger([regen], [demoted])
+        assert [d["id"] for d in out] == [regen["id"]]
+        assert out[0]["status"] == "pending" and gc.DROPPED_NOTE not in out[0]["evidence"]
+
+    def test_re_approved_demoted_finding_is_demoted_again(self):
+        # 候補外のまま UI で再承認しても、次の生成で再び pending に戻る（根拠なしの適用を防ぐ）。
+        demoted = gc.merge_ledger([], self._unregenerated())[0]
+        demoted["status"] = "approved"
+        out = gc.merge_ledger([], [demoted])
+        assert out[0]["status"] == "pending" and out[0]["evidence"].count(gc.DROPPED_NOTE) == 1
 
 
 def test_detected_by_constant():

@@ -26,6 +26,8 @@ GENDER_FILES = {"male": [MAN], "female": [WOMAN], "unisex": [MAN, WOMAN]}
 DETECTED_BY = "qa-update v1"
 # id は一致するが内容（entry / action / value）が変わった finding に付ける注記
 CHANGED_NOTE = "（前回の提案から内容が変わったため再判断）"
+# 事前承認済みだったが今回の生成で候補外になった（根拠が消えた）finding に付ける注記
+DROPPED_NOTE = "（今回の生成では候補外のため再判断）"
 
 
 def load_dataset(dataset_dir):
@@ -214,9 +216,16 @@ def _surname_rows(dataset, kanji, reading):
 
 def _finding_key(d):
     # type: (dict) -> tuple
-    """status を引き継ぐための同一性キー（qa_batch._finding_key と同じ規則）。"""
+    """status を引き継ぐための同一性キー（qa_batch._finding_key と同じ規則）。
+
+    add_kanji だけは entry を含めない: 提案内容（読み・追加漢字）は id と value に入っており、
+    entry は「追加先の既存行」なので、同じ行に別候補を適用しただけで変わる。entry を
+    キーに含めると、その度に rejected/approved が pending に戻ってしまう。
+    """
     fix = d.get("proposed_fix") or {}
-    return (d.get("id"), d.get("check"), d.get("entry"), fix.get("action"), fix.get("value", ""))
+    action = fix.get("action")
+    entry = None if action == "add_kanji" else d.get("entry")
+    return (d.get("id"), d.get("check"), entry, action, fix.get("value", ""))
 
 
 def carry_over(new, existing):
@@ -249,16 +258,34 @@ def merge_ledger(new, existing):
     # type: (List[dict], List[dict]) -> List[dict]
     """既存台帳と今回の生成結果を統合する。
 
-    このスクリプトが所有するのは自分が生成した pending だけ。今回生成されなかった
-    既存 finding のうち、status が pending でないもの（applied / approved / rejected の
-    監査証跡）と detected_by が DETECTED_BY 以外のもの（gender_batch merge 由来の add_row
-    など）はそのまま保持する。生成されなかった自前の pending は候補外になったので落とす。
+    このスクリプトが所有するのは自分が生成した finding だけ。今回生成されなかった
+    既存 finding の扱い:
+
+    - detected_by が DETECTED_BY 以外（gender_batch merge 由来の add_row など）: そのまま保持
+    - 自前の applied / rejected（監査証跡）: そのまま保持
+    - 自前の approved: 索引更新・閾値変更・cap 外れで根拠が消えたのに /qa-apply で
+      適用されないよう pending に戻し、evidence 末尾に DROPPED_NOTE を付ける
+    - 自前の pending: 候補外になったので落とす。ただし DROPPED_NOTE 付き（上で pending に
+      戻したもの）は利用者が判断するまで残す（再実行で注記は重複させない → バイト一致）
+
     出力順は 保持分（既存順）→ 今回の生成分（generate の順）で決定的。
     """
     new_ids = {d["id"] for d in new}
-    kept = [d for d in existing
-            if d["id"] not in new_ids
-            and (d.get("status") != "pending" or d.get("detected_by") != DETECTED_BY)]
+    kept = []  # type: List[dict]
+    for d in existing:
+        if d["id"] in new_ids:
+            continue
+        status = d.get("status")
+        evidence = d.get("evidence") or ""
+        if d.get("detected_by") != DETECTED_BY or status in ("applied", "rejected"):
+            kept.append(d)
+        elif status == "approved":
+            demoted = dict(d, status="pending")
+            if not evidence.endswith(DROPPED_NOTE):
+                demoted["evidence"] = evidence + DROPPED_NOTE
+            kept.append(demoted)
+        elif status == "pending" and evidence.endswith(DROPPED_NOTE):
+            kept.append(d)
     return kept + carry_over(new, existing)
 
 
