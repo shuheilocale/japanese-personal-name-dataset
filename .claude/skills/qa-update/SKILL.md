@@ -55,6 +55,10 @@ Wikidata（CC0）と国立国会図書館典拠（自由利用）から名の候
    新規読みが `qa/work/<run-id>/gender_pending.json` に出力される。候補の上限
    （既定 2000 件、`--max-candidates`）を超えた分は次回に回る。閾値は `--min-ndl`
    （既定 2）/ `--auto-ndl`（既定 5、自動承認しきい値）で調整する。
+   `--out` が既にある場合の再実行は、自分が生成した pending（`detected_by: "qa-update v1"`）
+   以外の既存 finding — 手順5の性別バッチ由来（`detected_by: "qa-update/gender_batch v1"`）の
+   add_row や approved/rejected/applied 済みのもの — をそのまま保持し、id・entry・action・value が
+   完全一致する finding は status を引き継ぐ（内容が変わったものは pending に戻し evidence に注記）。
 
 5. 性別判定（`gender_pending.json` が空でない場合）:
 

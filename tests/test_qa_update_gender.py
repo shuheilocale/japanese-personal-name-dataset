@@ -6,6 +6,7 @@ import sys
 
 import findings_io
 import gender_batch as gb
+import generate_candidates as gc
 
 
 def _pending(tmp_path):
@@ -32,6 +33,10 @@ def test_prep_and_merge(tmp_path):
     assert fs[0]["entry"] == "りん,rin,凛,鈴" and fs[0]["status"] == "pending"
     assert "LLM" in fs[0]["evidence"] and fs[0]["sources"]["ndl"] == 6
     assert summary["missing_batches"] == ["gbatch_002"]
+    # generate_candidates の再実行で保持されるよう、detected_by で出自を区別する
+    assert fs[0]["detected_by"] == gb.DETECTED_BY == "qa-update/gender_batch v1"
+    assert gb.DETECTED_BY != gc.DETECTED_BY
+    assert findings_io.validate_finding(fs[0]) == []
 
 
 def test_unisex_and_unknown(tmp_path):

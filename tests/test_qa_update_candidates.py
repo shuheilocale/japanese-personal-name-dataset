@@ -119,10 +119,122 @@ class TestGenerate:
         assert len(adds) == 1 and adds[0]["sources"]["ndl"] == 9  # 根拠最大のもの
 
     def test_carry_over(self):
-        old = [{"id": "a", "status": "rejected"}, {"id": "b", "status": "applied"}]
-        new = [{"id": "a", "status": "pending"}, {"id": "b", "status": "approved"}, {"id": "c", "status": "pending"}]
+        old = [_f("a", "rejected"), _f("b", "applied")]
+        new = [_f("a", "pending", today="2026-10-01"), _f("b", "approved", today="2026-10-01"),
+               _f("c", "pending", today="2026-10-01")]
         out = gc.carry_over(new, old)
         assert [x["status"] for x in out] == ["rejected", "applied", "pending"]
+        # 完全一致なら detected_at も引き継ぐ（同じ索引での再実行がバイト一致するため）
+        assert [x["detected_at"] for x in out] == ["2026-09-06", "2026-09-06", "2026-10-01"]
+        assert gc.CHANGED_NOTE not in json.dumps(out, ensure_ascii=False)
+
+
+SUP = {"ndl": 7, "wikidata": 1, "jmnedict": False}
+
+
+def _f(fid, status, entry="いつき,itsuki,樹", action="add_row", value="", today="2026-09-06",
+       file="first_name_man_org.csv"):
+    d = gc._finding(file, entry, action, value, SUP, status, today)
+    d["id"] = fid
+    return d
+
+
+class TestCarryOverKey:
+    def test_surname_value_change_resets_to_pending_with_note(self):
+        old = _f("s", "approved", entry="神谷,88900,かみや,kamiya", action="fix_reading", value="かみたに",
+                 file="last_name_org.csv")
+        new = _f("s", "pending", entry="神谷,88900,かみや,kamiya", action="fix_reading", value="かべや",
+                 file="last_name_org.csv", today="2026-10-01")
+        out = gc.carry_over([new], [old])
+        assert out[0]["status"] == "pending" and out[0]["proposed_fix"]["value"] == "かべや"
+        assert out[0]["evidence"].endswith(gc.CHANGED_NOTE)
+        assert out[0]["detected_at"] == "2026-10-01"
+
+    def test_add_row_entry_change_resets_to_pending_with_note(self):
+        old = _f("r", "approved", entry="つむぎ,tsumugi,紬,紬希")
+        new = _f("r", "pending", entry="つむぎ,tsumugi,紬,紬希,紬葵", today="2026-10-01")
+        out = gc.carry_over([new], [old])
+        assert out[0]["status"] == "pending" and out[0]["entry"] == "つむぎ,tsumugi,紬,紬希,紬葵"
+        assert out[0]["evidence"].endswith(gc.CHANGED_NOTE)
+
+    def test_exact_match_keeps_status(self):
+        old = _f("r", "approved", entry="つむぎ,tsumugi,紬,紬希")
+        new = _f("r", "pending", entry="つむぎ,tsumugi,紬,紬希", today="2026-10-01")
+        out = gc.carry_over([new], [old])
+        assert out[0]["status"] == "approved" and out[0]["detected_at"] == "2026-09-06"
+        assert gc.CHANGED_NOTE not in out[0]["evidence"]
+
+    def test_rejected_add_kanji_with_same_content_stays_rejected(self):
+        old = _f("k", "rejected", entry="けんいち,kenichi,健一", action="add_kanji", value="権市")
+        new = _f("k", "pending", entry="けんいち,kenichi,健一", action="add_kanji", value="権市")
+        assert gc.carry_over([new], [old])[0]["status"] == "rejected"
+
+    def test_note_persists_while_pending_and_drops_once_decided(self):
+        # 内容変更で pending+注記になった finding は、同じ索引で再実行しても注記を保つ
+        # （バイト一致）。承認/却下されたあとの再実行では注記を引き継がない。
+        changed = _f("r", "pending", entry="つむぎ,tsumugi,紬,紬希,紬葵")
+        changed["evidence"] += gc.CHANGED_NOTE
+        again = _f("r", "pending", entry="つむぎ,tsumugi,紬,紬希,紬葵")
+        assert gc.carry_over([again], [changed])[0]["evidence"] == changed["evidence"]
+        decided = dict(changed, status="approved")
+        again2 = _f("r", "pending", entry="つむぎ,tsumugi,紬,紬希,紬葵")
+        out = gc.carry_over([again2], [decided])[0]
+        assert out["status"] == "approved" and gc.CHANGED_NOTE not in out["evidence"]
+
+    def test_key_matches_qa_batch_rule(self):
+        d = _f("x", "pending", entry="e", action="add_kanji", value="v")
+        d["check"] = "missing_entry"
+        assert gc._finding_key(d) == ("x", "missing_entry", "e", "add_kanji", "v")
+
+
+class TestMergeLedger:
+    def _existing(self):
+        llm = _f("first_name_woman_org.csv:りりあ:missing_entry:add_row", "pending",
+                 entry="りりあ,riria,莉里亜", file="first_name_woman_org.csv")
+        llm["detected_by"] = "qa-update/gender_batch v1"
+        applied = _f("first_name_woman_org.csv:さくら:missing_entry:add_kanji:咲空", "applied",
+                     entry="さくら,sakura,桜", action="add_kanji", value="咲空", file="first_name_woman_org.csv")
+        stale = _f("first_name_man_org.csv:けんいち:missing_entry:add_kanji:建市", "pending",
+                   entry="けんいち,kenichi,健一", action="add_kanji", value="建市")
+        regen = _f("first_name_man_org.csv:けんいち:missing_entry:add_kanji:兼市", "rejected",
+                   entry="けんいち,kenichi,健一", action="add_kanji", value="兼市")
+        return [llm, applied, stale, regen]
+
+    def test_keeps_foreign_pending_and_non_pending_drops_stale_own_pending(self):
+        existing = self._existing()
+        new = [_f("first_name_man_org.csv:けんいち:missing_entry:add_kanji:兼市", "pending",
+                  entry="けんいち,kenichi,健一", action="add_kanji", value="兼市", today="2026-10-01"),
+               _f("first_name_man_org.csv:れんと:missing_entry:add_row", "approved",
+                  entry="れんと,rento,蓮斗", today="2026-10-01")]
+        out = gc.merge_ledger(new, existing)
+        ids = [d["id"] for d in out]
+        assert ids == [
+            "first_name_woman_org.csv:りりあ:missing_entry:add_row",          # LLM 由来 pending は保持
+            "first_name_woman_org.csv:さくら:missing_entry:add_kanji:咲空",    # applied は保持
+            "first_name_man_org.csv:けんいち:missing_entry:add_kanji:兼市",    # 再生成分（status 引き継ぎ）
+            "first_name_man_org.csv:れんと:missing_entry:add_row",            # 新規
+        ]
+        assert out[2]["status"] == "rejected" and out[2]["detected_at"] == "2026-09-06"
+        assert out[0]["detected_by"] == "qa-update/gender_batch v1"
+        assert len({d["id"] for d in out}) == len(out)
+
+    def test_rerun_with_same_input_is_stable(self):
+        new = [_f("a", "pending"), _f("b", "approved", entry="れんと,rento,蓮斗")]
+        first = gc.merge_ledger([dict(d, proposed_fix=dict(d["proposed_fix"])) for d in new], self._existing())
+        second = gc.merge_ledger([dict(d, proposed_fix=dict(d["proposed_fix"])) for d in new], first)
+        assert json.dumps(first, ensure_ascii=False) == json.dumps(second, ensure_ascii=False)
+
+    def test_regenerated_id_replaces_kept_copy(self):
+        # 保持対象（applied 等）と同 id が再生成された場合も id は重複しない。
+        existing = [_f("a", "approved")]
+        out = gc.merge_ledger([_f("a", "pending", entry="いつき,itsuki,樹,一樹")], existing)
+        assert [d["id"] for d in out] == ["a"]
+        assert out[0]["status"] == "pending" and out[0]["entry"] == "いつき,itsuki,樹,一樹"
+
+
+def test_detected_by_constant():
+    assert gc._finding("first_name_man_org.csv", "あ,a,亜", "add_kanji", "阿", SUP, "pending",
+                       "2026-09-06")["detected_by"] == gc.DETECTED_BY == "qa-update v1"
 
 
 def test_romaji_for():

@@ -21,6 +21,11 @@ from checks import load_rows  # noqa: E402
 
 MAN, WOMAN, LAST = "first_name_man_org.csv", "first_name_woman_org.csv", "last_name_org.csv"
 GENDER_FILES = {"male": [MAN], "female": [WOMAN], "unisex": [MAN, WOMAN]}
+# このスクリプトが「所有」する finding の出自。再実行時に台帳から削除してよいのは
+# この値を持つ pending だけ（gender_batch merge 由来などは別の値を持つ）。
+DETECTED_BY = "qa-update v1"
+# id は一致するが内容（entry / action / value）が変わった finding に付ける注記
+CHANGED_NOTE = "（前回の提案から内容が変わったため再判断）"
 
 
 def load_dataset(dataset_dir):
@@ -53,7 +58,7 @@ def _evidence(sup):
 
 
 def _finding(file, entry, action, value, sup, status, today, check="missing_entry", confidence="high",
-             extra_evidence=""):
+             extra_evidence="", detected_by=DETECTED_BY):
     # type: (...) -> dict
     # 名ファイルは entry の1列目が読み、姓ファイルは1列目が漢字。add_kanji は同一
     # (file, key) に複数候補があり得るため value（追加する漢字）を id に含めて一意化する。
@@ -67,7 +72,7 @@ def _finding(file, entry, action, value, sup, status, today, check="missing_entr
         "check": check, "severity": "warning", "confidence": confidence,
         "evidence": _evidence(sup) + extra_evidence,
         "proposed_fix": {"action": action, "value": value}, "status": status,
-        "detected_at": today, "detected_by": "qa-update v1", "sources": dict(sup),
+        "detected_at": today, "detected_by": detected_by, "sources": dict(sup),
     }
 
 
@@ -159,13 +164,54 @@ def _surname_rows(dataset, kanji, reading):
     return [r for r in dataset.get("_surname_rows", {}).get(kanji, []) if r[2] == reading]
 
 
+def _finding_key(d):
+    # type: (dict) -> tuple
+    """status を引き継ぐための同一性キー（qa_batch._finding_key と同じ規則）。"""
+    fix = d.get("proposed_fix") or {}
+    return (d.get("id"), d.get("check"), d.get("entry"), fix.get("action"), fix.get("value", ""))
+
+
 def carry_over(new, existing):
     # type: (List[dict], List[dict]) -> List[dict]
-    prev = {d["id"]: d["status"] for d in existing}
+    """既存台帳から status を引き継ぐ（new をその場で更新して返す）。
+
+    id・check・entry・action・value が完全一致したときだけ status と detected_at を
+    引き継ぐ。id は一致するが内容が変わった場合は再判断が必要なので pending に戻し、
+    evidence 末尾に CHANGED_NOTE を付ける。内容変更で pending になった finding は
+    判断されるまで同じ注記を保つ（同じ索引での再実行がバイト一致するため）。
+    """
+    prev = {_finding_key(d): d for d in existing}
+    prev_ids = {d["id"] for d in existing}
     for d in new:
-        if d["id"] in prev:
-            d["status"] = prev[d["id"]]
+        old = prev.get(_finding_key(d))
+        if old is not None:
+            d["status"] = old["status"]
+            if "detected_at" in old:
+                d["detected_at"] = old["detected_at"]
+            if d["status"] == "pending" and (old.get("evidence") or "").endswith(CHANGED_NOTE) \
+                    and not d.get("evidence", "").endswith(CHANGED_NOTE):
+                d["evidence"] = d.get("evidence", "") + CHANGED_NOTE
+        elif d["id"] in prev_ids:
+            d["status"] = "pending"
+            d["evidence"] = d.get("evidence", "") + CHANGED_NOTE
     return new
+
+
+def merge_ledger(new, existing):
+    # type: (List[dict], List[dict]) -> List[dict]
+    """既存台帳と今回の生成結果を統合する。
+
+    このスクリプトが所有するのは自分が生成した pending だけ。今回生成されなかった
+    既存 finding のうち、status が pending でないもの（applied / approved / rejected の
+    監査証跡）と detected_by が DETECTED_BY 以外のもの（gender_batch merge 由来の add_row
+    など）はそのまま保持する。生成されなかった自前の pending は候補外になったので落とす。
+    出力順は 保持分（既存順）→ 今回の生成分（generate の順）で決定的。
+    """
+    new_ids = {d["id"] for d in new}
+    kept = [d for d in existing
+            if d["id"] not in new_ids
+            and (d.get("status") != "pending" or d.get("detected_by") != DETECTED_BY)]
+    return kept + carry_over(new, existing)
 
 
 def main():
@@ -185,7 +231,7 @@ def main():
     allowed = bk.load_allowed(args.allowed)
     fs, pending = generate(index, dataset, allowed, args.min_ndl, args.auto_ndl, args.max_candidates)
     if os.path.exists(args.out):
-        fs = carry_over(fs, findings_io.load_findings(args.out))
+        fs = merge_ledger(fs, findings_io.load_findings(args.out))
     for d in fs:
         problems = findings_io.validate_finding(d)
         if problems:

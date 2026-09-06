@@ -18,6 +18,8 @@ import findings_io  # noqa: E402
 import generate_candidates as gc  # noqa: E402
 
 DECISIONS = ("male", "female", "unisex", "unknown")
+# generate_candidates の再実行で台帳から消されないよう、出自を generate と区別する
+DETECTED_BY = "qa-update/gender_batch v1"
 
 
 def prep(pending_path, out_dir, batch_size=100):
@@ -65,7 +67,7 @@ def merge(out_dir, findings_path, today=None):
             entry = ",".join([reading, gc.romaji_for(reading)] + e["kanji"])
             for fn in gc.GENDER_FILES[gender]:
                 d = gc._finding(fn, entry, "add_row", "", e["sources"], "pending", today,
-                                extra_evidence="（性別: LLM 判定 %s）" % gender)
+                                extra_evidence="（性別: LLM 判定 %s）" % gender, detected_by=DETECTED_BY)
                 if d["id"] not in known:
                     added.append(d)
                     known.add(d["id"])
