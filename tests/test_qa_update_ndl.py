@@ -65,3 +65,44 @@ class TestResume:
         assert len(calls) == 3  # 完了済み接頭辞はスキップ
         manifest = json.load(open(os.path.join(work, "manifest.json"), encoding="utf-8"))
         assert manifest["done"] == ["00", "01", "02"]
+
+    def test_adaptive_subdivision(self, tmp_path):
+        work = str(tmp_path / "work")
+        calls = []
+
+        def fetch(url, params=None, headers=None):
+            query = params["query"]
+            calls.append(query)
+            # "0" に対しては cap (1000) 件を返す
+            # "00".."09" に対しては 3 件ずつを返す
+            prefix = query.split("ndlna/")[1].split("\"")[0]
+            if prefix == "0":
+                bindings = [_b("x%d" % i, "山田, 太郎", "ヤマダ, タロウ", "ja-Kana")
+                           for i in range(1000)]
+            else:
+                bindings = [_b("x%d" % i, "山田, 太郎", "ヤマダ, タロウ", "ja-Kana")
+                           for i in range(3)]
+            body = {"results": {"bindings": bindings}}
+            return json.dumps(body).encode("utf-8")
+
+        fn.fetch_prefixes(["0"], work, fetch=fetch, cap=1000, max_depth=9)
+        manifest = json.load(open(os.path.join(work, "manifest.json"), encoding="utf-8"))
+        # "0" は split に入り、"00".."09" が done に入る
+        assert "0" in manifest["split"]
+        assert set(manifest["done"]) == {"00", "01", "02", "03", "04", "05", "06", "07", "08", "09"}
+        assert not manifest.get("saturated")
+
+    def test_saturated_prefix(self, tmp_path):
+        work = str(tmp_path / "work")
+
+        def fetch(url, params=None, headers=None):
+            # 常に cap (1000) 件を返す
+            bindings = [_b("x%d" % i, "山田, 太郎", "ヤマダ, タロウ", "ja-Kana")
+                       for i in range(1000)]
+            body = {"results": {"bindings": bindings}}
+            return json.dumps(body).encode("utf-8")
+
+        fn.fetch_prefixes(["0"], work, fetch=fetch, cap=1000, max_depth=1)
+        manifest = json.load(open(os.path.join(work, "manifest.json"), encoding="utf-8"))
+        # max_depth=1 で "0" が cap に達しているため saturated に入る
+        assert "0" in manifest["saturated"]

@@ -1,14 +1,14 @@
 """国立国会図書館典拠データ（Web NDL Authorities）から人名を取得して正規化 JSONL に書く。
 
-SPARQL の ORDER BY + OFFSET は大きなオフセットでサーバエラーになるため、
 典拠 ID（http://id.ndl.go.jp/auth/ndlna/NNNNNNNN）の接頭辞でチャンク分割する。
+NDL SPARQL エンドポイントは 1 クエリあたり最大 1,000 行で結果を打ち切るため、
+1,000 行に達した接頭辞は自動的に 10 個の部分接頭辞に再分割される（適応分割）。
 接頭辞ごとの結果を作業ディレクトリに保存し、manifest.json で再開できる。
 """
 import argparse
 import datetime
 import json
 import os
-import re
 import sys
 from typing import List, Optional, Tuple
 
@@ -17,7 +17,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sources_common as sc  # noqa: E402
 
 ENDPOINT = "https://id.ndl.go.jp/auth/ndla/sparql"
-_DATE_RE = re.compile(r"^[0-9]{3,4}-?([0-9]{3,4})?$")
 
 
 def build_query(prefix):
@@ -84,25 +83,49 @@ def aggregate(records):
             for (s, kind, kanji, reading), n in sorted(totals.items())]
 
 
-def fetch_prefixes(prefixes, work, fetch=None):
-    # type: (List[str], str, object) -> None
+def fetch_prefixes(prefixes, work, fetch=None, cap=1000, max_depth=9):
+    # type: (List[str], str, object, int, int) -> None
     os.makedirs(work, exist_ok=True)
     mpath = os.path.join(work, "manifest.json")
-    manifest = {"done": []}
+    manifest = {"done": [], "split": [], "saturated": []}
     if os.path.exists(mpath):
         with open(mpath, encoding="utf-8") as f:
             manifest = json.load(f)
-    for prefix in prefixes:
-        if prefix in manifest["done"]:
-            continue
+
+    def _process(prefix):
+        # type: (str) -> None
+        # 既に done または split に含まれている場合はスキップ
+        if prefix in manifest["done"] or prefix in manifest["split"]:
+            return
+
         data = (fetch or sc.http_get)(ENDPOINT, params={"query": build_query(prefix)},
                                       headers={"Accept": "application/sparql-results+json"})
         bindings = json.loads(data.decode("utf-8"))["results"]["bindings"]
+        count = len(bindings)
+
+        # 1000 行に達した場合の処理
+        if count >= cap:
+            if len(prefix) < max_depth:
+                # 接頭辞をさらに分割して再帰的に処理
+                manifest["split"].append(prefix)
+                for digit in "0123456789":
+                    _process(prefix + digit)
+                print("prefix %s: %d 行（分割）" % (prefix, count))
+                return
+            else:
+                # max_depth に達しても cap 以上の場合は saturated に記録
+                manifest["saturated"].append(prefix)
+                print("警告: prefix %s: %d 行（飽和・データ欠損の可能性）" % (prefix, count))
+
+        # 記録を保存
         sc.write_jsonl(os.path.join(work, "prefix-%s.jsonl" % prefix), bindings_to_records(bindings))
         manifest["done"].append(prefix)
+        print("prefix %s: %d 行" % (prefix, count))
+
+    for prefix in prefixes:
+        _process(prefix)
         with open(mpath, "w", encoding="utf-8", newline="\n") as f:
             json.dump(manifest, f, ensure_ascii=False, indent=1)
-        print("prefix %s: %d 行" % (prefix, len(bindings)))
 
 
 def main():
@@ -112,15 +135,38 @@ def main():
         "qa", "sources", "ndl-%s.jsonl" % datetime.date.today().isoformat()))
     parser.add_argument("--work", default=os.path.join("qa", "sources", "ndl-work"))
     parser.add_argument("--prefix-len", type=int, default=3)
+    parser.add_argument("--cap", type=int, default=1000,
+                        help="結果上限（デフォルト 1000）")
+    parser.add_argument("--max-depth", type=int, default=9,
+                        help="最大接頭辞深度（デフォルト 9）")
     args = parser.parse_args()
     prefixes = ["%0*d" % (args.prefix_len, i) for i in range(10 ** args.prefix_len)]
-    fetch_prefixes(prefixes, args.work)
+    fetch_prefixes(prefixes, args.work, cap=args.cap, max_depth=args.max_depth)
+
+    # work ディレクトリ内の全 prefix-*.jsonl ファイルを読み込む
     records = []
-    for prefix in prefixes:
-        records.extend(sc.read_jsonl(os.path.join(args.work, "prefix-%s.jsonl" % prefix)))
+    work_dir = args.work
+    if os.path.exists(work_dir):
+        for fname in sorted(os.listdir(work_dir)):
+            if fname.startswith("prefix-") and fname.endswith(".jsonl"):
+                fpath = os.path.join(work_dir, fname)
+                records.extend(sc.read_jsonl(fpath))
+
     agg = aggregate(records)
     sc.write_jsonl(args.out, agg)
     print("書き込み: %s（%d 件）" % (args.out, len(agg)))
+
+    # manifest を確認して saturated があれば exit 1
+    mpath = os.path.join(args.work, "manifest.json")
+    if os.path.exists(mpath):
+        with open(mpath, encoding="utf-8") as f:
+            manifest = json.load(f)
+        if manifest.get("saturated"):
+            print("エラー: 飽和接頭辞 %d 個（%s）- データ欠損の可能性があります" %
+                  (len(manifest["saturated"]), ", ".join(manifest["saturated"][:3]) +
+                   ("..." if len(manifest["saturated"]) > 3 else "")))
+            return 1
+
     return 0
 
 
