@@ -20,13 +20,15 @@ XML = """<?xml version="1.0" encoding="UTF-8"?>
 <trans><name_type>&place;</name_type></trans></entry>
 <entry><ent_seq>4</ent_seq><k_ele><keb>薫</keb></k_ele><r_ele><reb>かおる</reb></r_ele>
 <trans><name_type>&masc;</name_type><name_type>&fem;</name_type></trans></entry>
+<entry><ent_seq>5</ent_seq><k_ele><keb>薫子</keb></k_ele><r_ele><reb>かおるこ</reb></r_ele>
+<trans><name_type>&fem;</name_type></trans></entry>
 </JMnedict>
 """
 
 
 def test_entries_and_records():
     entries = list(fj.iter_entries(io.BytesIO(XML.encode("utf-8"))))
-    assert len(entries) == 4
+    assert len(entries) == 5
     recs = fj.entries_to_records(entries)
     assert {"source": "jmnedict", "kind": "given", "kanji": "漱石", "reading": "そうせき",
             "gender": "male", "count": 1} in recs
@@ -34,4 +36,6 @@ def test_entries_and_records():
             "gender": None, "count": 1} in recs
     kaoru = [r for r in recs if r["kanji"] == "薫"]
     assert kaoru and kaoru[0]["gender"] == "unisex"
+    kaoru_ko = [r for r in recs if r["kanji"] == "薫子"]
+    assert kaoru_ko and kaoru_ko[0]["gender"] == "female"
     assert not [r for r in recs if r["kanji"] == "東京"]

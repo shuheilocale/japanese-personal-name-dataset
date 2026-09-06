@@ -7,6 +7,7 @@ import argparse
 import datetime
 import gzip
 import os
+import re
 import sys
 import xml.etree.ElementTree as ET
 from typing import Iterator, List
@@ -35,8 +36,8 @@ def _classify(types):
     # type: (List[str]) -> List[tuple]
     kinds = []
     joined = " | ".join(types)
-    male = "male given" in joined
     female = "female given" in joined
+    male = bool(re.search(r"(?<!fe)male given", joined))
     if male and female:
         kinds.append(("given", "unisex"))
     elif male:
