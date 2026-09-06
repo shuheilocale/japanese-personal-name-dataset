@@ -100,8 +100,13 @@ def fetch_prefixes(prefixes, work, fetch=None, cap=1000, max_depth=9):
 
     def _process(prefix):
         # type: (str) -> None
-        # 既に done または split に含まれている場合はスキップ
-        if prefix in manifest["done"] or prefix in manifest["split"]:
+        # 既に done ならスキップ。split 済みなら自身は再取得せず、子接頭辞へ再帰する
+        # （中断→再実行で未取得の子を取りこぼさないため。子の done/split 判定は各再帰で行う）
+        if prefix in manifest["done"]:
+            return
+        if prefix in manifest["split"]:
+            for digit in "0123456789":
+                _process(prefix + digit)
             return
 
         data = (fetch or sc.http_get)(ENDPOINT, params={"query": build_query(prefix)},

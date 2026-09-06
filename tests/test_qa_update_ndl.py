@@ -155,3 +155,43 @@ class TestResume:
         fn.fetch_prefixes(["00", "01", "02"], work, fetch=fetch_success)
         # 00, 01 はスキップされるため、fetch は 02 に対してのみ呼び出される
         assert call_count_2[0] == 1
+
+    def test_resume_fetches_unfetched_children_of_split_prefix(self, tmp_path):
+        # split 済み接頭辞 "0" の子のうち 00〜02 だけが done の状態で中断した manifest から
+        # 再実行すると、未取得の 03〜09 が取得され、00〜02 と "0" 自身は再取得されない。
+        work = str(tmp_path / "work")
+        os.makedirs(work)
+        with open(os.path.join(work, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump({"done": ["00", "01", "02"], "split": ["0"], "saturated": []}, f)
+        calls = []
+
+        def fetch(url, params=None, headers=None):
+            prefix = params["query"].split("ndlna/")[1].split("\"")[0]
+            calls.append(prefix)
+            body = {"results": {"bindings": [_b("x", "山田, 太郎", "ヤマダ, タロウ", "ja-Kana")]}}
+            return json.dumps(body).encode("utf-8")
+
+        fn.fetch_prefixes(["0"], work, fetch=fetch)
+        assert calls == ["0%d" % i for i in range(3, 10)]
+        manifest = json.load(open(os.path.join(work, "manifest.json"), encoding="utf-8"))
+        assert manifest["done"] == ["0%d" % i for i in range(10)]
+        assert manifest["split"] == ["0"]
+        for i in range(3, 10):
+            assert os.path.exists(os.path.join(work, "prefix-0%d.jsonl" % i))
+
+    def test_resume_recurses_into_nested_split_prefixes(self, tmp_path):
+        # 2 段階 split（"0" → "05" も split 済み）でも、孫の未取得分まで再帰して取得する。
+        work = str(tmp_path / "work")
+        os.makedirs(work)
+        done = ["0%d" % i for i in range(10) if i != 5] + ["050", "051"]
+        with open(os.path.join(work, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump({"done": done, "split": ["0", "05"], "saturated": []}, f)
+        calls = []
+
+        def fetch(url, params=None, headers=None):
+            calls.append(params["query"].split("ndlna/")[1].split("\"")[0])
+            body = {"results": {"bindings": [_b("x", "山田, 太郎", "ヤマダ, タロウ", "ja-Kana")]}}
+            return json.dumps(body).encode("utf-8")
+
+        fn.fetch_prefixes(["0"], work, fetch=fetch)
+        assert calls == ["05%d" % i for i in range(2, 10)]
