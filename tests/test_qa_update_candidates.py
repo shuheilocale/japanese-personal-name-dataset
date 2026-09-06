@@ -493,3 +493,32 @@ class TestThresholdBoundaries:
 
     def test_ndl_4_with_wikidata_is_pending(self, tmp_path):
         assert self._run(tmp_path, ndl=4, wikidata=1) == "pending"
+
+
+class TestKanaOnlyVariants:
+    """既存データの漢字列にはかなのみの表記が無い（2026-09 時点で 0 件）ので、候補にも出さない。
+
+    NDL には「みつぐ」のようにかな書きの名が多数あり、素通しすると add_kanji の 3 割が
+    かなのみになった。かな混じり（つね子・木の実）は既存データに前例があるので許容する。
+    """
+
+    def _index(self):
+        return si.build_index([
+            sc.record("ndl", "given", "あい", "あい", count=9),      # 既存読みへのかなのみ → 出さない
+            sc.record("ndl", "given", "愛", "あい", count=9),
+            sc.record("ndl", "given", "りん", "りん", count=6),      # 新規読みのかなのみ候補 → 漢字候補から外す
+            sc.record("ndl", "given", "凛", "りん", count=6),
+            sc.record("ndl", "given", "あいも", "あいも", count=9),  # かなのみしか無い新規読み → 読みごと出さない
+            sc.record("ndl", "given", "つね子", "つねこ", count=6),  # かな混じりは許容
+        ])
+
+    def test_kana_only_values_are_excluded_everywhere(self, tmp_path):
+        ds = gc.load_dataset(_dataset(tmp_path))
+        fs, pending = gc.generate(self._index(), ds, ALLOWED | {"子", "恒"}, min_ndl=2, auto_ndl=5, today="2026-09-06")
+        values = [f["proposed_fix"]["value"] for f in fs if f["proposed_fix"]["action"] == "add_kanji"]
+        assert "愛" in values and "あい" not in values
+        by_reading = {p["reading"]: p for p in pending}
+        assert by_reading["りん"]["kanji"] == ["凛"]
+        assert "あいも" not in by_reading
+        assert "あいも" not in json.dumps(fs, ensure_ascii=False)
+        assert by_reading["つねこ"]["kanji"] == ["つね子"]

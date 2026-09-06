@@ -103,6 +103,13 @@ def _pair_gender(index, kanji, reading):
     return slot.get("gender", {}).get("wikidata") or si.gender_of(index, "given", reading)
 
 
+def _has_kanji(text):
+    # type: (str) -> bool
+    """漢字を1文字以上含むか。既存データの漢字列にはかなのみの表記が無いので、
+    NDL のかな書きの名（みつぐ・あいも 等）は候補にしない。かな混じり（つね子）は許容。"""
+    return bool(bk._CJK_RE.search(text))
+
+
 def _conflict_note(gender, kanji=None):
     # type: (Optional[str], Optional[List[str]]) -> str
     if kanji:
@@ -120,7 +127,7 @@ def generate(index, dataset, allowed, min_ndl=2, auto_ndl=5, max_candidates=2000
         if kind != "given":
             continue
         sup = {"ndl": slot["ndl"], "wikidata": slot["wikidata"], "jmnedict": slot["jmnedict"]}
-        if not _qualifies(sup, min_ndl) or not bk.kanji_allowed(kanji, allowed):
+        if not _qualifies(sup, min_ndl) or not _has_kanji(kanji) or not bk.kanji_allowed(kanji, allowed):
             continue
         holders = [fn for fn in (MAN, WOMAN) if reading in dataset[fn]]
         if holders:
