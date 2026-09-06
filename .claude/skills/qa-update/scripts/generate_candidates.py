@@ -47,9 +47,8 @@ def load_dataset(dataset_dir):
 
 def romaji_for(reading):
     # type: (str) -> str
-    cands = romaji._combine(romaji._alternatives(romaji.tokenize(reading), "keep"))
-    pref = sorted(c for c in cands if "'" not in c) or sorted(cands)
-    return pref[0]
+    """追加行・fix_reading に採用する代表ローマ字（romaji.preferred_romaji と同じ規則）。"""
+    return romaji.preferred_romaji(reading)
 
 
 def _evidence(sup):

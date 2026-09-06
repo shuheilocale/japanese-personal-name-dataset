@@ -68,3 +68,15 @@ class TestLongVowelsAndStyle:
         assert romaji.classify_style("あいいちろう", "aichirou") == "mixed"
         assert romaji.classify_style("さとう", "satoh") == "unknown"
         assert romaji.classify_style("あゃ", "aya") == "unknown"  # 分割不能
+
+
+class TestPreferredRomaji:
+    def test_wapuro_style_without_apostrophe(self):
+        assert romaji.preferred_romaji("さとう") == "satou"
+        assert romaji.preferred_romaji("けんいち") == "kenichi"
+        assert romaji.preferred_romaji("かみたに") == "kamitani"
+        assert romaji.preferred_romaji("いっしゅう") == "isshuu"
+
+    def test_result_is_a_valid_candidate(self):
+        for hira in ("さとう", "けんいち", "しんぺい", "りょうすけ"):
+            assert romaji.preferred_romaji(hira) in romaji.romaji_candidates(hira)

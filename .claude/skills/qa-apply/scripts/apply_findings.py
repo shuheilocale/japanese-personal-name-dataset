@@ -16,9 +16,28 @@ sys.path.insert(0, os.path.abspath(os.path.join(
     os.pardir, os.pardir, "validate-dataset", "scripts")))
 
 import findings_io  # noqa: E402
+import romaji  # noqa: E402
 
 _REPORT_CHECKED_RE = re.compile(r"^- \[x\] `([^`]+)`", re.IGNORECASE)
 _VALUE_SEP_RE = re.compile(r"[,、]")
+
+
+def romaji_for(reading):
+    # type: (str) -> str
+    """新しい読みに合わせるローマ字（generate_candidates.romaji_for と同じ規則）。"""
+    return romaji.preferred_romaji(reading)
+
+
+def _romaji_after_fix_reading(current_romaji, new_reading):
+    # type: (str, str) -> str
+    """fix_reading 適用後のローマ字。現在のローマ字が新読みの許容候補に含まれていれば
+    そのまま、含まれていなければ romaji_for(新読み) に置き換える。"""
+    try:
+        if current_romaji in romaji.romaji_candidates(new_reading):
+            return current_romaji
+    except ValueError:
+        pass
+    return romaji_for(new_reading)
 
 
 def _split_values(value):
@@ -102,7 +121,9 @@ def _apply_one(lines, finding, current_entry):
     fix_romaji / fix_reading で書き換える列インデックスを file で切り替える。
     remove_kanji は姓CSVでは概念が存在しないため常にスキップする。
     fix_reading のマージ統合は名CSVのみ（姓CSVは同じ読みの別の姓が
-    正当なため従来どおり単純書き換え）。
+    正当なため従来どおり単純書き換え）。fix_reading で読みを書き換えたとき、
+    現在のローマ字が新読みの許容候補に無ければローマ字列も同時に更新する
+    （マージ統合の場合は既存行のローマ字を維持する）。
     """
     action = finding["proposed_fix"]["action"]
     value = finding["proposed_fix"].get("value", "")
@@ -140,6 +161,8 @@ def _apply_one(lines, finding, current_entry):
                 return (lines, None, True, None, None,
                         (old_target_line, merged_entry))
         cols[2 if is_last_name else 0] = value
+        romaji_col = 3 if is_last_name else 1
+        cols[romaji_col] = _romaji_after_fix_reading(cols[romaji_col], value)
     elif action == "none":
         return lines, None, True, current_entry, None, None
     new_entry = ",".join(cols)
@@ -157,10 +180,16 @@ def _preview_merge_note(file_lines, action, value, fname, current_entry, dataset
     lines = file_lines.get(fname, [])
     if current_entry is None or current_entry not in lines:
         return ""
-    if action == "fix_reading" and fname != _LAST_NAME_FILE:
+    if action == "fix_reading":
         idx = lines.index(current_entry)
-        if _find_duplicate_row(lines, value, exclude_idx=idx) is not None:
+        if fname != _LAST_NAME_FILE and _find_duplicate_row(lines, value, exclude_idx=idx) is not None:
             return "（既存行 %s に統合）" % value
+        cols = current_entry.split(",")
+        romaji_col = 3 if fname == _LAST_NAME_FILE else 1
+        if len(cols) > romaji_col:
+            new_romaji = _romaji_after_fix_reading(cols[romaji_col], value)
+            if new_romaji != cols[romaji_col]:
+                return "（ローマ字 %s → %s）" % (cols[romaji_col], new_romaji)
     elif action == "move_to_file":
         target = value
         if target not in file_lines:

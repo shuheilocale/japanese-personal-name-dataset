@@ -193,3 +193,16 @@ def classify_style(hira, romaji_str):
     if romaji_str in _combine(_alternatives(tokens, "both")):
         return "mixed"
     return "unknown"
+
+
+def preferred_romaji(hira):
+    # type: (str) -> str
+    """データ追加・読み修正時に採用する代表ローマ字（かな通り・ワープロ式）。
+
+    長音は省略しない（さとう→satou）。撥音のアポストロフィ付き（ken'ichi）より
+    無し（kenichi）を優先し、残る候補は辞書順で最初のものを採用する。
+    qa-update の候補生成と qa-apply の fix_reading で同じ規則を使う。
+    """
+    cands = _combine(_alternatives(tokenize(hira), "keep"))
+    pref = sorted(c for c in cands if "'" not in c) or sorted(cands)
+    return pref[0]

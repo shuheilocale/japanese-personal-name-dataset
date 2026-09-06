@@ -243,8 +243,9 @@ class TestApply:
                        encoding="utf-8").read()
         assert "佐藤,1887000,さとう,sato\n" in content
 
-    def test_fix_reading_on_last_name_csv_changes_only_hiragana_column(self, tmp_path):
-        # fix_reading は col2（ひらがな）を書き換え、漢字・推定人数・ローマ字は不変。
+    def test_fix_reading_on_last_name_csv_changes_hiragana_column(self, tmp_path):
+        # fix_reading は col2（ひらがな）を書き換え、漢字・推定人数は不変。
+        # ローマ字（col3）は新読みの候補に無ければ新読みに合わせて更新される（satou → satoo）。
         ds = _write_dataset(tmp_path)
         fp = str(tmp_path / "f.jsonl")
         findings_io.append_findings(fp, [
@@ -255,7 +256,7 @@ class TestApply:
         assert result["applied"] == 1
         content = open(os.path.join(ds, "last_name_org.csv"),
                        encoding="utf-8").read()
-        assert "佐藤,1887000,さとお,satou\n" in content
+        assert "佐藤,1887000,さとお,satoo\n" in content
 
     def test_remove_kanji_on_last_name_csv_is_skipped(self, tmp_path):
         # remove_kanji は名CSV固有の概念（複数の漢字表記からの除外）であり、
@@ -382,7 +383,8 @@ class TestApply:
         assert statuses == ["applied", "applied", "applied"]
 
     def test_fix_reading_on_last_name_does_not_merge(self, tmp_path):
-        # 姓CSVでは「同じ読みの別の姓」が正当なため、マージせず従来どおり単純書き換え。
+        # 姓CSVでは「同じ読みの別の姓」が正当なため、マージせず単純書き換え
+        # （ローマ字は新読み さとう に合わせて suzuki → satou）。
         ds = tmp_path / "dataset"
         ds.mkdir()
         (ds / "first_name_man_org.csv").write_text("かおる,kaoru,薫\n", encoding="utf-8")
@@ -398,7 +400,7 @@ class TestApply:
         assert result["applied"] == 1
         content = open(os.path.join(str(ds), "last_name_org.csv"),
                        encoding="utf-8").read()
-        assert content == "佐藤,1887000,さとう,satou\n鈴木,1730000,さとう,suzuki\n"
+        assert content == "佐藤,1887000,さとう,satou\n鈴木,1730000,さとう,satou\n"
 
     def test_dry_run_shows_merge_note_for_fix_reading(self, tmp_path, capsys):
         ds = _write_dataset(tmp_path)
@@ -463,3 +465,72 @@ class TestAddActions:
         assert result["applied"] == 1
         assert open(os.path.join(ds, "first_name_man_org.csv"), encoding="utf-8").read() == \
             "あい,ai,藍,愛\nかおる,kaoru,薫\n"
+
+
+class TestFixReadingRomajiSync:
+    """fix_reading 適用時、現在のローマ字が新読みの候補に無ければローマ字も同時に更新する。"""
+
+    def _ds(self, tmp_path):
+        d = tmp_path / "dataset"
+        d.mkdir()
+        (d / "first_name_man_org.csv").write_text("あい,ai,藍\nかおる,kaoru,薫\n", encoding="utf-8")
+        (d / "first_name_woman_org.csv").write_text("さくら,sakura,桜\n", encoding="utf-8")
+        (d / "last_name_org.csv").write_text(
+            "佐藤,1887000,さとう,satou\n神谷,88900,かみや,kamiya\n", encoding="utf-8")
+        return str(d)
+
+    def test_last_name_romaji_follows_new_reading(self, tmp_path):
+        ds = self._ds(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [
+            _finding("last_name_org.csv", "神谷,88900,かみや,kamiya", "fix_reading", "かみたに",
+                     check="kanji_reading_mismatch"),
+        ])
+        result = apply_findings.apply(fp, ds, str(tmp_path / "qa"))
+        assert result["applied"] == 1
+        content = open(os.path.join(ds, "last_name_org.csv"), encoding="utf-8").read()
+        assert content == "佐藤,1887000,さとう,satou\n神谷,88900,かみたに,kamitani\n"
+
+    def test_first_name_romaji_follows_new_reading(self, tmp_path):
+        ds = self._ds(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [
+            _finding("first_name_man_org.csv", "かおる,kaoru,薫", "fix_reading", "かおり",
+                     check="kanji_reading_mismatch"),
+        ])
+        apply_findings.apply(fp, ds, str(tmp_path / "qa"))
+        content = open(os.path.join(ds, "first_name_man_org.csv"), encoding="utf-8").read()
+        assert "かおり,kaori,薫\n" in content
+
+    def test_romaji_untouched_when_still_consistent(self, tmp_path):
+        # 長音省略式 sato は さとお の候補にも含まれ、kaoru は かをる の候補にも含まれる → 触らない。
+        ds = self._ds(tmp_path)
+        with open(os.path.join(ds, "last_name_org.csv"), "w", encoding="utf-8") as f:
+            f.write("佐藤,1887000,さとう,sato\n")
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [
+            _finding("last_name_org.csv", "佐藤,1887000,さとう,sato", "fix_reading", "さとお",
+                     check="kanji_reading_mismatch"),
+            _finding("first_name_man_org.csv", "かおる,kaoru,薫", "fix_reading", "かをる",
+                     check="kanji_reading_mismatch"),
+        ])
+        apply_findings.apply(fp, ds, str(tmp_path / "qa"))
+        assert "佐藤,1887000,さとお,sato\n" in open(os.path.join(ds, "last_name_org.csv"), encoding="utf-8").read()
+        assert "かをる,kaoru,薫\n" in open(os.path.join(ds, "first_name_man_org.csv"), encoding="utf-8").read()
+
+    def test_dry_run_mentions_romaji_update(self, tmp_path, capsys):
+        ds = self._ds(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [
+            _finding("last_name_org.csv", "神谷,88900,かみや,kamiya", "fix_reading", "かみたに",
+                     check="kanji_reading_mismatch"),
+        ])
+        apply_findings.apply(fp, ds, str(tmp_path / "qa"), dry_run=True)
+        out = capsys.readouterr().out
+        assert "（ローマ字 kamiya → kamitani）" in out
+        assert "神谷,88900,かみや,kamiya\n" in open(os.path.join(ds, "last_name_org.csv"), encoding="utf-8").read()
+
+    def test_preferred_romaji_rule(self):
+        assert apply_findings.romaji_for("かみたに") == "kamitani"
+        assert apply_findings.romaji_for("けんいち") == "kenichi"  # アポストロフィ無しを優先
+        assert apply_findings.romaji_for("さとう") == "satou"  # 長音はワープロ式（keep）
