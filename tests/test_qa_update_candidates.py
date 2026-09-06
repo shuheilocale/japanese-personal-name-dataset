@@ -129,6 +129,53 @@ class TestGenerate:
         assert gc.CHANGED_NOTE not in json.dumps(out, ensure_ascii=False)
 
 
+class TestPairGender:
+    """性別矛盾の判定は pair 単位の Wikidata クラスを優先し、無ければ読み単位へフォールバック。"""
+
+    def test_pair_level_female_blocks_auto_approve_for_man_file(self, tmp_path):
+        # かおる は男女両ファイルにある（読み単位では unisex）が、表記 香留 の Wikidata クラスは female。
+        ds = gc.load_dataset(_dataset(tmp_path))
+        index = si.build_index([
+            sc.record("wikidata", "given", "薫", "かおる", gender="male", count=3),
+            sc.record("wikidata", "given", "香留", "かおる", gender="female", count=1),
+            sc.record("ndl", "given", "香留", "かおる", count=7),
+        ])
+        fs, _ = gc.generate(index, ds, ALLOWED | {"留"}, today="2026-09-06")
+        by_id = {f["id"]: f for f in fs}
+        man = by_id["first_name_man_org.csv:かおる:missing_entry:add_kanji:香留"]
+        woman = by_id["first_name_woman_org.csv:かおる:missing_entry:add_kanji:香留"]
+        assert man["status"] == "pending" and "（索引の性別 female と追加先が矛盾）" in man["evidence"]
+        assert woman["status"] == "approved" and "矛盾" not in woman["evidence"]
+
+    def test_falls_back_to_reading_level_when_pair_has_no_class(self, tmp_path):
+        # 表記 香留 には Wikidata クラスが無い（NDL のみ）→ 読み単位（仮名項目 female）で判定する。
+        ds = gc.load_dataset(_dataset(tmp_path))
+        index = si.build_index([
+            sc.record("wikidata", "given", "", "かおる", gender="female", count=2),
+            sc.record("wikidata", "given", "香留", "かおる", gender=None, count=1),
+            sc.record("ndl", "given", "香留", "かおる", count=7),
+        ])
+        fs, _ = gc.generate(index, ds, ALLOWED | {"留"}, today="2026-09-06")
+        by_id = {f["id"]: f for f in fs}
+        assert by_id["first_name_man_org.csv:かおる:missing_entry:add_kanji:香留"]["status"] == "pending"
+        assert by_id["first_name_woman_org.csv:かおる:missing_entry:add_kanji:香留"]["status"] == "approved"
+
+    def test_add_row_with_conflicting_pair_is_not_auto_approved(self, tmp_path):
+        # 新規読み いつき（読み単位 unisex → 両ファイル）で、表記 樹 は male クラス:
+        # 女性ファイル向け add_row は矛盾を注記して pending、男性ファイル向けは approved。
+        ds = gc.load_dataset(_dataset(tmp_path))
+        index = si.build_index([
+            sc.record("wikidata", "given", "", "いつき", gender="female", count=1),
+            sc.record("wikidata", "given", "樹", "いつき", gender="male", count=3),
+            sc.record("ndl", "given", "樹", "いつき", count=7),
+        ])
+        fs, _ = gc.generate(index, ds, ALLOWED, today="2026-09-06")
+        by_id = {f["id"]: f for f in fs}
+        assert by_id["first_name_man_org.csv:いつき:missing_entry:add_row"]["status"] == "approved"
+        woman = by_id["first_name_woman_org.csv:いつき:missing_entry:add_row"]
+        assert woman["status"] == "pending" and "（索引の性別 male と追加先が矛盾: 樹）" in woman["evidence"]
+
+
 SUP = {"ndl": 7, "wikidata": 1, "jmnedict": False}
 
 

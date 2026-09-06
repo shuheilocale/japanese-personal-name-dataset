@@ -91,6 +91,24 @@ def _gender_conflict(gender, file):
     return (gender == "male" and file == WOMAN) or (gender == "female" and file == MAN)
 
 
+def _pair_gender(index, kanji, reading):
+    # type: (dict, str, str) -> Optional[str]
+    """表記（pair）単位の Wikidata 性別クラス。無ければ読み単位（gender_of）へフォールバック。
+
+    pair の gender は {"wikidata": "male|female|unisex", "jmnedict": ...} の dict。
+    JMnedict は照合専用なので pair 単位では見ない（読み単位のフォールバックで gender_of が扱う）。
+    """
+    slot = index["pairs"].get(si.pair_key("given", kanji, reading)) or {}
+    return slot.get("gender", {}).get("wikidata") or si.gender_of(index, "given", reading)
+
+
+def _conflict_note(gender, kanji=None):
+    # type: (Optional[str], Optional[List[str]]) -> str
+    if kanji:
+        return "（索引の性別 %s と追加先が矛盾: %s）" % (gender, "・".join(kanji))
+    return "（索引の性別 %s と追加先が矛盾）" % gender
+
+
 def generate(index, dataset, allowed, min_ndl=2, auto_ndl=5, max_candidates=2000, today=None):
     # type: (dict, dict, set, int, int, int, Optional[str]) -> Tuple[List[dict], List[dict]]
     today = today or datetime.date.today().isoformat()
@@ -103,14 +121,15 @@ def generate(index, dataset, allowed, min_ndl=2, auto_ndl=5, max_candidates=2000
         sup = {"ndl": slot["ndl"], "wikidata": slot["wikidata"], "jmnedict": slot["jmnedict"]}
         if not _qualifies(sup, min_ndl) or not bk.kanji_allowed(kanji, allowed):
             continue
-        gender = si.gender_of(index, "given", reading)
         holders = [fn for fn in (MAN, WOMAN) if reading in dataset[fn]]
         if holders:
+            gender = _pair_gender(index, kanji, reading)
             for fn in holders:
                 if kanji in dataset[fn][reading]:
                     continue
-                status = "approved" if _auto(sup, auto_ndl) and not _gender_conflict(gender, fn) else "pending"
-                note = "（索引の性別 %s と追加先が矛盾）" % gender if _gender_conflict(gender, fn) else ""
+                conflict = _gender_conflict(gender, fn)
+                status = "approved" if _auto(sup, auto_ndl) and not conflict else "pending"
+                note = _conflict_note(gender) if conflict else ""
                 entry = ",".join([reading, dataset_romaji(dataset, fn, reading)] + dataset[fn][reading])
                 adds.append(_finding(fn, entry, "add_kanji", kanji, sup, status, today, extra_evidence=note))
         else:
@@ -126,10 +145,18 @@ def generate(index, dataset, allowed, min_ndl=2, auto_ndl=5, max_candidates=2000
             continue
         slot = index["readings"].get(si.reading_key("given", reading), {})
         from_wikidata = bool(slot.get("gender", {}).get("wikidata"))
-        status = "approved" if from_wikidata and all(_auto(p[1], auto_ndl) for p in pairs) else "pending"
+        auto = from_wikidata and all(_auto(p[1], auto_ndl) for p in pairs)
         entry = ",".join([reading, romaji_for(reading)] + [p[0] for p in pairs])
         for fn in GENDER_FILES[gender]:
-            adds.append(_finding(fn, entry, "add_row", "", total, status, today))
+            # 追加先ファイルと表記単位の Wikidata クラスが矛盾する表記があれば事前承認しない
+            conflicts = {}  # type: Dict[str, List[str]]
+            for kanji, _sup in pairs:
+                g = _pair_gender(index, kanji, reading)
+                if _gender_conflict(g, fn):
+                    conflicts.setdefault(g, []).append(kanji)
+            note = "".join(_conflict_note(g, ks) for g, ks in sorted(conflicts.items()))
+            status = "approved" if auto and not conflicts else "pending"
+            adds.append(_finding(fn, entry, "add_row", "", total, status, today, extra_evidence=note))
     adds.sort(key=lambda f: -(f["sources"]["ndl"] + f["sources"]["wikidata"]))
     adds = adds[:max_candidates]
     surname_findings = []
