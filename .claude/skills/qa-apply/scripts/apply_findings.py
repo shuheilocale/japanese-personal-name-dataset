@@ -122,6 +122,12 @@ def _apply_one(lines, finding, current_entry):
         cols = [cols[0], cols[1]] + [k for k in cols[2:] if k not in targets]
     elif action == "fix_romaji":
         cols[3 if is_last_name else 1] = value
+    elif action == "add_kanji":
+        existing = cols[2:]
+        for k in _split_values(value):
+            if k not in existing:
+                existing.append(k)
+        cols = cols[:2] + existing
     elif action == "fix_reading":
         if not is_last_name:
             dup_idx = _find_duplicate_row(lines, value, exclude_idx=idx)
@@ -192,6 +198,24 @@ def apply(findings_path, dataset_dir, qa_dir, report_path=None, dry_run=False):
         value = d["proposed_fix"].get("value", "")
         if fname not in file_lines:
             file_lines[fname] = _read_lines(os.path.join(dataset_dir, fname))
+        if d["proposed_fix"]["action"] == "add_row":
+            new_cols = d["entry"].split(",")
+            reading = new_cols[0]
+            lines = file_lines[fname]
+            dup_idx = _find_duplicate_row(lines, reading)
+            if dup_idx is not None:
+                merged = _merge_kanji_cols(lines[dup_idx].split(","), new_cols[2:])
+                old_line = lines[dup_idx]
+                lines[dup_idx] = ",".join(merged)
+                _propagate_merge(evolution, fname, old_line, lines[dup_idx])
+                print("適用: %s（既存行 %s に統合）" % (d["id"], reading))
+            else:
+                keys = [ln.split(",")[0] for ln in lines]
+                lines.insert(bisect.bisect_left(keys, reading), d["entry"])
+                print("適用: %s（行を追加）" % d["id"])
+            d["status"] = "applied"
+            applied += 1
+            continue
         key = (fname, d["entry"])
         current_entry = evolution.get(key, d["entry"])
         merge_note = _preview_merge_note(file_lines, action, value,

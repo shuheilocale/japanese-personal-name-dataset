@@ -40,6 +40,8 @@ def rebase(findings, index, reopen_unapplied=False, today=None):
             continue
         current = triage_server.current_row_for(d["entry"], info)
         status = d["status"]
+        if d["proposed_fix"]["action"] in ("add_row", "add_kanji"):
+            continue
         if status in REBASABLE:
             if d["entry"] in info["rows"]:
                 continue

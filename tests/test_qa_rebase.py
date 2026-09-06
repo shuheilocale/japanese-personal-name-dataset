@@ -133,6 +133,17 @@ class TestReopenUnapplied:
         assert f["evidence"] == "根拠（再オープン: 未適用を検出 2026-08-30）"
 
 
+def test_rebase_skips_add_actions(tmp_path):
+    # ブリーフ記載の呼び出し形（rebase(findings_path, dataset_dir, dry_run=...)）は
+    # 現行の rebase(findings, index, ...) シグネチャと合わないため、既存の呼び出し規約
+    # （findings リスト + load_dataset_index の結果）に合わせて検証する。戻り値の
+    # "unresolved" も現行実装どおりリスト（0件なら空リスト）でアサートする。
+    f = _finding("x", MAN, "いつき,itsuki,樹", "add_row", "", status="pending", check="missing_entry")
+    r = rebase_findings.rebase([f], _index(tmp_path))
+    assert f["entry"] == "いつき,itsuki,樹"
+    assert r["unresolved"] == []
+
+
 class TestMain:
     def _run(self, tmp_path, monkeypatch, extra):
         ds = _dataset(tmp_path)

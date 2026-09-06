@@ -132,6 +132,34 @@ class TestVerifiedCache:
         assert "abc" in findings_io.load_verified(p)
 
 
+class TestPhase2Schema:
+    def _f(self, action, value, entry, file="first_name_man_org.csv", sources=None):
+        f = _valid_finding()
+        f["file"] = file
+        f["check"] = "missing_entry"
+        f["proposed_fix"] = {"action": action, "value": value}
+        f["entry"] = entry
+        if sources is not None:
+            f["sources"] = sources
+        return f
+
+    def test_add_row_valid(self):
+        f = self._f("add_row", "", "あいり,airi,愛莉,愛梨", sources={"ndl": 12, "wikidata": 1, "jmnedict": True})
+        assert findings_io.validate_finding(f) == []
+
+    def test_add_row_entry_format(self):
+        assert findings_io.validate_finding(self._f("add_row", "", "あいり,airi"))
+        assert findings_io.validate_finding(self._f("add_row", "", "アイリ,airi,愛莉"))
+        assert findings_io.validate_finding(self._f("add_row", "", "あいり,Airi!,愛莉"))
+
+    def test_add_kanji_needs_value(self):
+        assert findings_io.validate_finding(self._f("add_kanji", "", "あい,ai,藍"))
+        assert findings_io.validate_finding(self._f("add_kanji", "愛", "あい,ai,藍")) == []
+
+    def test_sources_shape(self):
+        assert findings_io.validate_finding(self._f("add_kanji", "愛", "あい,ai,藍", sources={"ndl": "12"}))
+
+
 class TestValueFormat:
     def test_value_format_rules(self):
         base = _valid_finding()

@@ -12,8 +12,10 @@ from typing import Dict, List
 CHECK_TYPES = {
     "format_error", "romaji_reading_mismatch", "kanji_reading_mismatch",
     "not_a_name", "wrong_gender_file", "duplicate", "cross_file_inconsistency",
+    "missing_entry",
 }
-ACTIONS = {"remove_row", "remove_kanji", "fix_romaji", "fix_reading", "move_to_file", "none"}
+ACTIONS = {"remove_row", "remove_kanji", "fix_romaji", "fix_reading", "move_to_file", "none",
+           "add_row", "add_kanji"}
 STATUSES = {"pending", "approved", "rejected", "applied"}
 CONFIDENCES = {"high", "medium", "low"}
 SEVERITIES = {"error", "warning"}
@@ -81,6 +83,19 @@ def validate_finding(d):
             problems.append("fix_romaji の value はローマ字のみ（カンマ・説明文は不可）: %r" % value)
         if fix["action"] == "remove_kanji" and not (value or "").strip():
             problems.append("remove_kanji の value が空です")
+        if fix["action"] == "add_kanji" and not (value or "").strip():
+            problems.append("add_kanji の value が空です")
+        if fix["action"] == "add_row":
+            cols = (d.get("entry") or "").split(",")
+            if len(cols) < 3 or not _FIX_READING_RE.match(cols[0]) or not _FIX_ROMAJI_RE.match(cols[1]) \
+                    or any(not k.strip() for k in cols[2:]):
+                problems.append("add_row の entry は「ひらがな,ローマ字,漢字...」の完全行である必要があります: %r" % d.get("entry"))
+    sources = d.get("sources")
+    if sources is not None:
+        if not isinstance(sources, dict) or not isinstance(sources.get("ndl", 0), int) \
+                or not isinstance(sources.get("wikidata", 0), int) \
+                or not isinstance(sources.get("jmnedict", False), bool):
+            problems.append("sources は {ndl: int, wikidata: int, jmnedict: bool} である必要があります")
     return problems
 
 

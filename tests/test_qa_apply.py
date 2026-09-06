@@ -424,3 +424,42 @@ class TestApply:
         apply_findings.apply(fp, str(ds), str(tmp_path / "qa"), dry_run=True)
         out = capsys.readouterr().out
         assert "（既存行 さくら に統合）" in out
+
+
+class TestAddActions:
+    def _ds(self, tmp_path):
+        d = tmp_path / "dataset"
+        d.mkdir()
+        (d / "first_name_man_org.csv").write_text("あい,ai,藍\nかおる,kaoru,薫\n", encoding="utf-8")
+        (d / "first_name_woman_org.csv").write_text("さくら,sakura,桜\n", encoding="utf-8")
+        return str(d)
+
+    def _add(self, file, action, entry, value=""):
+        return {"id": "%s:%s:%s" % (file, entry.split(",")[0], action), "file": file, "entry": entry,
+                "check": "missing_entry", "severity": "warning", "confidence": "high",
+                "evidence": "NDL 3人", "proposed_fix": {"action": action, "value": value},
+                "status": "approved", "detected_at": "2026-09-06", "detected_by": "qa-update v1"}
+
+    def test_add_kanji_appends_dedup(self, tmp_path):
+        ds = self._ds(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [self._add("first_name_man_org.csv", "add_kanji", "あい,ai,藍", "愛,藍")])
+        apply_findings.apply(fp, ds, str(tmp_path / "qa"))
+        assert "あい,ai,藍,愛\n" in open(os.path.join(ds, "first_name_man_org.csv"), encoding="utf-8").read()
+
+    def test_add_row_inserts_sorted(self, tmp_path):
+        ds = self._ds(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [self._add("first_name_man_org.csv", "add_row", "いつき,itsuki,樹,一樹")])
+        apply_findings.apply(fp, ds, str(tmp_path / "qa"))
+        assert open(os.path.join(ds, "first_name_man_org.csv"), encoding="utf-8").read() == \
+            "あい,ai,藍\nいつき,itsuki,樹,一樹\nかおる,kaoru,薫\n"
+
+    def test_add_row_merges_when_reading_exists(self, tmp_path):
+        ds = self._ds(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [self._add("first_name_man_org.csv", "add_row", "あい,ai,愛,藍")])
+        result = apply_findings.apply(fp, ds, str(tmp_path / "qa"))
+        assert result["applied"] == 1
+        assert open(os.path.join(ds, "first_name_man_org.csv"), encoding="utf-8").read() == \
+            "あい,ai,藍,愛\nかおる,kaoru,薫\n"
