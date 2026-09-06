@@ -169,3 +169,7 @@ qa/work/
 
 # Playwright MCP のセッション成果物（トリアージ UI の手動スモーク）
 .playwright-mcp/
+
+# qa-update の取得スナップショット（manifest.json だけ追跡）
+qa/sources/*
+!qa/sources/manifest.json
