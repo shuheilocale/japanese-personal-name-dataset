@@ -176,6 +176,72 @@ class TestPairGender:
         assert woman["status"] == "pending" and "（索引の性別 male と追加先が矛盾: 樹）" in woman["evidence"]
 
 
+def _surname_dataset(tmp_path, last_rows):
+    d = tmp_path / "dataset_s"
+    d.mkdir()
+    for fn in ("first_name_man_org.csv", "first_name_man_opti.csv",
+               "first_name_woman_org.csv", "first_name_woman_opti.csv"):
+        (d / fn).write_text("", encoding="utf-8")
+    (d / "last_name_org.csv").write_text(last_rows, encoding="utf-8")
+    return gc.load_dataset(str(d))
+
+
+class TestSurnameMatching:
+    """姓の照合に使う読み集合は NDL/Wikidata の pair に限定し、JMnedict は照合（存在確認）専用。"""
+
+    def test_jmnedict_only_reading_not_in_value_or_evidence(self, tmp_path):
+        ds = _surname_dataset(tmp_path, "金子,100,きんす,kinsu\n")
+        index = si.build_index([
+            sc.record("ndl", "surname", "金子", "かねこ", count=50),
+            sc.record("jmnedict", "surname", "金子", "かなこ"),
+        ])
+        fs, _ = gc.generate(index, ds, ALLOWED, today="2026-09-06")
+        assert len(fs) == 1
+        assert fs[0]["proposed_fix"]["value"] == "かねこ"
+        assert "かなこ" not in json.dumps(fs, ensure_ascii=False)
+        assert "（索引の読み: かねこ。現データの読み きんす は索引に無い）" in fs[0]["evidence"]
+
+    def test_jmnedict_only_surname_yields_no_finding(self, tmp_path):
+        ds = _surname_dataset(tmp_path, "長谷川,379000,はせがわ,hasegawa\n")
+        index = si.build_index([sc.record("jmnedict", "surname", "長谷川", "はせかわ")])
+        fs, _ = gc.generate(index, ds, ALLOWED, today="2026-09-06")
+        assert fs == []
+
+    def test_current_reading_confirmed_only_by_jmnedict_yields_no_finding(self, tmp_path):
+        # 現データの読みが JMnedict にだけ一致する場合は「照合できず」として finding を出さない
+        # （JMnedict の値を転記しないまま存在確認にだけ使う）。
+        ds = _surname_dataset(tmp_path, "神谷,88900,かみや,kamiya\n")
+        index = si.build_index([
+            sc.record("ndl", "surname", "神谷", "かみたに", count=30),
+            sc.record("ndl", "surname", "神谷", "かべや", count=5),
+            sc.record("jmnedict", "surname", "神谷", "かみや"),
+        ])
+        fs, _ = gc.generate(index, ds, ALLOWED, today="2026-09-06")
+        assert fs == []
+
+    def test_wikidata_only_surname_picks_most_supported_reading(self, tmp_path):
+        ds = _surname_dataset(tmp_path, "新井,204000,しんい,shini\n")
+        index = si.build_index([
+            sc.record("wikidata", "surname", "新井", "あらい", count=3),
+            sc.record("wikidata", "surname", "新井", "にい", count=5),
+        ])
+        fs, _ = gc.generate(index, ds, ALLOWED, today="2026-09-06")
+        assert len(fs) == 1 and fs[0]["proposed_fix"]["value"] == "にい"
+        assert fs[0]["sources"] == {"ndl": 0, "wikidata": 5, "jmnedict": False}
+        assert "（索引の読み: あらい・にい。" in fs[0]["evidence"]
+
+    def test_best_uses_ndl_plus_wikidata_and_breaks_ties_by_reading(self, tmp_path):
+        ds = _surname_dataset(tmp_path, "東,100,とう,tou\n")
+        index = si.build_index([
+            sc.record("ndl", "surname", "東", "ひがし", count=10),
+            sc.record("wikidata", "surname", "東", "ひがし", count=1),
+            sc.record("ndl", "surname", "東", "あずま", count=8),
+            sc.record("wikidata", "surname", "東", "あずま", count=3),
+        ])
+        fs, _ = gc.generate(index, ds, ALLOWED, today="2026-09-06")
+        assert fs[0]["proposed_fix"]["value"] == "あずま"  # 8+3 = 11 = 10+1 → 読み順で あずま
+
+
 SUP = {"ndl": 7, "wikidata": 1, "jmnedict": False}
 
 

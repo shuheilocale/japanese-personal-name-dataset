@@ -160,12 +160,16 @@ def generate(index, dataset, allowed, min_ndl=2, auto_ndl=5, max_candidates=2000
     adds.sort(key=lambda f: -(f["sources"]["ndl"] + f["sources"]["wikidata"]))
     adds = adds[:max_candidates]
     surname_findings = []
+    by_surname = _surname_readings(index)
     for kanji, reading in dataset["surnames"].items():
-        prefix = si.pair_key("surname", kanji, "")
-        alts = {k.split("|")[2]: v for k, v in index["pairs"].items() if k.startswith(prefix)}
-        if not alts or reading in alts:
+        info = by_surname.get(kanji)
+        # alts は NDL/Wikidata に裏付けのある読みだけ（JMnedict のみの読みは value にも
+        # evidence にも転記しない）。現データの読みが JMnedict にだけ一致する場合は
+        # 「照合できず」として finding を出さない（存在確認にだけ使う）。
+        if not info or not info["alts"] or reading in info["known"]:
             continue
-        best = max(alts.items(), key=lambda kv: kv[1]["ndl"])[0]
+        alts = info["alts"]
+        best = sorted(alts.items(), key=lambda kv: (-(kv[1]["ndl"] + kv[1]["wikidata"]), kv[0]))[0][0]
         sup = si.support(index, "surname", kanji, best)
         raw = next((",".join(r) for r in _surname_rows(dataset, kanji, reading)), None)
         if raw is None:
@@ -179,6 +183,24 @@ def generate(index, dataset, allowed, min_ndl=2, auto_ndl=5, max_candidates=2000
     if dupes:
         raise ValueError("finding id が重複しています: %s" % ", ".join(dupes))
     return all_findings, gender_pending
+
+
+def _surname_readings(index):
+    # type: (dict) -> Dict[str, dict]
+    """姓の漢字 → {"alts": {読み: slot（NDL/Wikidata > 0 の pair のみ）}, "known": 索引にある全読み}。
+
+    index["pairs"] を1回走査して作る（姓ごとに全走査しないための前処理）。
+    """
+    out = {}  # type: Dict[str, dict]
+    for key, slot in index["pairs"].items():
+        kind, kanji, reading = key.split("|")
+        if kind != "surname":
+            continue
+        info = out.setdefault(kanji, {"alts": {}, "known": set()})
+        info["known"].add(reading)
+        if slot["ndl"] > 0 or slot["wikidata"] > 0:
+            info["alts"][reading] = slot
+    return out
 
 
 def dataset_romaji(dataset, fn, reading):
