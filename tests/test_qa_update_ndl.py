@@ -37,6 +37,17 @@ class TestRecords:
                 "gender": None, "count": 1} in recs
         assert len(recs) == 2
 
+    def test_language_case_insensitive(self):
+        # NDL endpoint returns lowercase "ja-kana" instead of "ja-Kana"
+        bindings = [
+            _b("a", "山田, 太郎", "ヤマダ, タロウ", "ja-kana"),  # lowercase
+            _b("b", "山田, 花子", "ヤマダ, ハナコ", "ja-Kana"),   # mixed case
+            _b("c", "山田, 次郎", "ヤマダ, ジロウ", "ja-latn"),   # excluded
+        ]
+        recs = fn.bindings_to_records(bindings)
+        # Both ja-kana and ja-Kana should be accepted
+        assert len(recs) == 4  # 2 records × 2 names each
+
     def test_aggregate(self):
         recs = fn.bindings_to_records([
             _b("a", "山田, 太郎", "ヤマダ, タロウ", "ja-Kana"),
@@ -106,3 +117,41 @@ class TestResume:
         manifest = json.load(open(os.path.join(work, "manifest.json"), encoding="utf-8"))
         # max_depth=1 で "0" が cap に達しているため saturated に入る
         assert "0" in manifest["saturated"]
+
+    def test_manifest_persists_across_interruption(self, tmp_path):
+        work = str(tmp_path / "work")
+        call_count_1 = [0]
+
+        def fetch_with_failure(url, params=None, headers=None):
+            call_count_1[0] += 1
+            # 最初の2つは成功、その後の3番目以降は失敗
+            if call_count_1[0] <= 2:
+                bindings = [_b("x", "山田, 太郎", "ヤマダ, タロウ", "ja-Kana")]
+                body = {"results": {"bindings": bindings}}
+                return json.dumps(body).encode("utf-8")
+            else:
+                raise RuntimeError("Network error")
+
+        # 最初の実行：00, 01 は成功、02 で例外が発生
+        try:
+            fn.fetch_prefixes(["00", "01", "02"], work, fetch=fetch_with_failure)
+        except RuntimeError:
+            pass
+
+        # manifest を確認：00, 01 は done に記録されている
+        manifest = json.load(open(os.path.join(work, "manifest.json"), encoding="utf-8"))
+        assert "00" in manifest["done"]
+        assert "01" in manifest["done"]
+        assert "02" not in manifest["done"]
+
+        # 2回目の実行で 00, 01 はスキップされ、02 のみ再実行される
+        call_count_2 = [0]
+        def fetch_success(url, params=None, headers=None):
+            call_count_2[0] += 1
+            bindings = [_b("x", "山田, 太郎", "ヤマダ, タロウ", "ja-Kana")]
+            body = {"results": {"bindings": bindings}}
+            return json.dumps(body).encode("utf-8")
+
+        fn.fetch_prefixes(["00", "01", "02"], work, fetch=fetch_success)
+        # 00, 01 はスキップされるため、fetch は 02 に対してのみ呼び出される
+        assert call_count_2[0] == 1

@@ -62,7 +62,8 @@ def bindings_to_records(bindings):
     # type: (List[dict]) -> List[dict]
     out = []
     for b in bindings:
-        if b.get("yomi", {}).get("xml:lang") != "ja-Kana":
+        lang = b.get("yomi", {}).get("xml:lang") or ""
+        if lang.lower() != "ja-kana":
             continue
         names = parse_label(b["label"]["value"])
         yomis = parse_yomi(b["yomi"]["value"])
@@ -92,6 +93,11 @@ def fetch_prefixes(prefixes, work, fetch=None, cap=1000, max_depth=9):
         with open(mpath, encoding="utf-8") as f:
             manifest = json.load(f)
 
+    def _save_manifest():
+        # type: () -> None
+        with open(mpath, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(manifest, f, ensure_ascii=False, indent=1)
+
     def _process(prefix):
         # type: (str) -> None
         # 既に done または split に含まれている場合はスキップ
@@ -108,6 +114,7 @@ def fetch_prefixes(prefixes, work, fetch=None, cap=1000, max_depth=9):
             if len(prefix) < max_depth:
                 # 接頭辞をさらに分割して再帰的に処理
                 manifest["split"].append(prefix)
+                _save_manifest()
                 for digit in "0123456789":
                     _process(prefix + digit)
                 print("prefix %s: %d 行（分割）" % (prefix, count))
@@ -115,17 +122,17 @@ def fetch_prefixes(prefixes, work, fetch=None, cap=1000, max_depth=9):
             else:
                 # max_depth に達しても cap 以上の場合は saturated に記録
                 manifest["saturated"].append(prefix)
+                _save_manifest()
                 print("警告: prefix %s: %d 行（飽和・データ欠損の可能性）" % (prefix, count))
 
         # 記録を保存
         sc.write_jsonl(os.path.join(work, "prefix-%s.jsonl" % prefix), bindings_to_records(bindings))
         manifest["done"].append(prefix)
+        _save_manifest()
         print("prefix %s: %d 行" % (prefix, count))
 
     for prefix in prefixes:
         _process(prefix)
-        with open(mpath, "w", encoding="utf-8", newline="\n") as f:
-            json.dump(manifest, f, ensure_ascii=False, indent=1)
 
 
 def main():
