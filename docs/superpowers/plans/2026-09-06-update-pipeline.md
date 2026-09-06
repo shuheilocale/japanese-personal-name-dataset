@@ -318,6 +318,8 @@ Expected: FAIL（`ModuleNotFoundError`）
 
 - [ ] **Step 3: 実装**
 
+（以下の埋め込みコードの人名用漢字 863 字は計画時点の値。実装時に 2026-06-26 改正後の 864 字へ修正した — 歴史的記録として残す）
+
 ```python
 # .claude/skills/qa-update/scripts/build_kanji_list.py
 """常用漢字（2136 字）と人名用漢字（863 字）の文字集合を生成する。

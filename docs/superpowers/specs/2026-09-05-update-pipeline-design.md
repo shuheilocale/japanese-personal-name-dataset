@@ -52,15 +52,15 @@ qa/kanji/jinmei.txt             # 常用漢字＋人名用漢字の文字集合
 
 ### 3.2 統一索引
 
-`(kind, kanji, reading)` → `{"ndl": n, "wikidata": n, "jmnedict": true|false, "gender": {"wikidata": "male", "jmnedict": "masc"}}`。スナップショットからオフラインで再構築できる（再現性）。
+`(kind, kanji, reading)` → `{"ndl": n, "wikidata": n, "jmnedict": true|false, "gender": {"wikidata": "male", "jmnedict": "male"}}`。`gender` の値はソースを問わず正規化後の `male` / `female` / `unisex`（同一ソース内で male と female が併存すれば `unisex`）。スナップショットからオフラインで再構築できる（再現性）。
 
 ## 4. 候補生成ポリシー（決定的）
 
 - **add_kanji**（既存読みへの新しい漢字表記）: 索引にあって現データに無い (漢字, 読み)。候補化は `ndl >= 2` または `wikidata >= 1`。事前承認（`status: approved`）は `ndl >= 5` かつ `wikidata >= 1`。閾値は CLI 引数 `--min-ndl 2 --auto-ndl 5` で調整可。
-  追加先はその読みが存在するファイル（男女両方にあれば両方）。Wikidata の性別クラスが追加先と矛盾する場合（例: 女性名クラスの表記を男性名ファイルの読みに追加）は候補化するが事前承認はしない（evidence に矛盾を明記）。
-- **add_row**（現データに無い読み）: 性別は Wikidata のクラスから決定（`unisex` は両ファイルに追加）。NDL にしかない読みは LLM 判定バッチ（qa-review と同じサブエージェント方式、出力は `male|female|unisex|unknown`）で性別を付け、`unknown` は pending のまま UI で手動決定。事前承認は性別が Wikidata 由来の場合のみ。ローマ字は `romaji.py` のかな通り表記で生成。追加先は `*_org.csv` のみ。
+  追加先はその読みが存在するファイル（男女両方にあれば両方）。性別の判定は表記（pair）単位の Wikidata クラスを優先し、無ければ読み単位のクラスにフォールバックする。それが追加先と矛盾する場合（例: 女性名クラスの表記を男性名ファイルの読みに追加）は候補化するが事前承認はしない（evidence に矛盾を明記）。
+- **add_row**（現データに無い読み）: 性別は Wikidata のクラスから決定（`unisex` は両ファイルに追加）。NDL にしかない読みは LLM 判定バッチ（qa-review と同じサブエージェント方式、出力は `male|female|unisex|unknown`）で性別を付け、`unknown` は pending のまま UI で手動決定。事前承認（`status: approved`）の条件は「性別が Wikidata 由来」かつ「行に含める全 pair が add_kanji と同じ事前承認閾値（`ndl >= 5` かつ `wikidata >= 1`）を満たす」かつ「表記単位の Wikidata クラスが追加先と矛盾する pair が無い」。LLM 判定由来は常に pending。ローマ字は `romaji.py` のかな通り表記で生成。追加先は `*_org.csv` のみ。
 - **除外ルール**: `qa/kanji/jinmei.txt` に無い字を含む表記は候補化しない。
-- **姓の照合**: 現 1,999 姓について、索引に同じ漢字の姓があり、現データの読みが索引のどの読みとも一致しない場合のみ `kanji_reading_mismatch`（`fix_reading` 提案＝索引で最多の読み、`confidence: medium`）。
+- **姓の照合**: 現 1,999 姓について、索引に同じ漢字の姓があり、現データの読みが索引のどの読みとも一致しない場合のみ `kanji_reading_mismatch`（`fix_reading` 提案＝索引で最多（`ndl + wikidata`）の読み、`confidence: medium`）。提案値と evidence の「索引の読み」には NDL/Wikidata に裏付けのある読みだけを使う。JMnedict のみの読みは転記せず存在確認にだけ使い、現データの読みが JMnedict にしか一致しない場合は「照合できず」として finding を出さない。
 - **名の既存エントリ**: 索引での裏付け（人物数）を UI シグナル `source_support` として表示するだけで findings は出さない（未収載 ≠ 誤り）。
 - 1回の実行で出す候補は根拠（`ndl + wikidata`）の降順で `--max-candidates 2000` 件まで。残りは次回。
 - 出力先: `qa/findings/<YYYY-MM>-update.jsonl`（`detected_by: "qa-update v1"`）。同一 run-id で再実行した場合は既存 status を引き継ぐ（qa_batch の merge と同じキー規則）。

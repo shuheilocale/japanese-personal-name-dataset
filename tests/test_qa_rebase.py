@@ -144,6 +144,22 @@ def test_rebase_skips_add_actions(tmp_path):
     assert r["unresolved"] == []
 
 
+def test_rebase_does_not_look_up_current_row_for_add_actions(tmp_path, monkeypatch):
+    # add_* は対象外なので current_row_for（同キー行の検索）を呼ばない。
+    calls = []
+    real = triage_server.current_row_for
+
+    def spy(entry, info):
+        calls.append(entry)
+        return real(entry, info)
+    monkeypatch.setattr(triage_server, "current_row_for", spy)
+    fs = [_finding("r", MAN, "いつき,itsuki,樹", "add_row", "", status="pending", check="missing_entry"),
+          _finding("k", MAN, "あきお,akio,明男,旧", "add_kanji", "新", status="approved", check="missing_entry"),
+          _finding("s", MAN, "あきお,akio,明男,旧", "remove_kanji", "旧")]
+    r = rebase_findings.rebase(fs, _index(tmp_path))
+    assert calls == ["あきお,akio,明男,旧"] and r["rebased"] == ["s"]
+
+
 class TestMain:
     def _run(self, tmp_path, monkeypatch, extra):
         ds = _dataset(tmp_path)

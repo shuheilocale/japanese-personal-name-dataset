@@ -2,7 +2,8 @@
 
 必ずユーザーの明示承認を得てから実行すること（CLAUDE.md のデータ保護方針）。
 status==approved のみ適用し、適用後は applied に更新する。
-rejected の finding はエントリを verified.json に登録し再検出を防ぐ。
+rejected の finding はエントリを verified.json に登録し再検出を防ぐ
+（add_row / add_kanji の却下は追加候補の却下であり行の検証ではないため登録しない）。
 """
 import argparse
 import bisect
@@ -60,6 +61,7 @@ def _write_lines(path, lines):
 
 
 _LAST_NAME_FILE = "last_name_org.csv"
+_ADD_ACTIONS = ("add_row", "add_kanji")
 
 
 def _find_duplicate_row(lines, reading, exclude_idx=None):
@@ -232,16 +234,17 @@ def apply(findings_path, dataset_dir, qa_dir, report_path=None, dry_run=False):
             reading = new_cols[0]
             lines = file_lines[fname]
             dup_idx = _find_duplicate_row(lines, reading)
+            print("適用予定: id=%s action=add_row entry=%s file=%s%s"
+                  % (d["id"], d["entry"], fname,
+                     "（既存行 %s に統合）" % reading if dup_idx is not None else "（行を追加）"))
             if dup_idx is not None:
                 merged = _merge_kanji_cols(lines[dup_idx].split(","), new_cols[2:])
                 old_line = lines[dup_idx]
                 lines[dup_idx] = ",".join(merged)
                 _propagate_merge(evolution, fname, old_line, lines[dup_idx])
-                print("適用: %s（既存行 %s に統合）" % (d["id"], reading))
             else:
                 keys = [ln.split(",")[0] for ln in lines]
                 lines.insert(bisect.bisect_left(keys, reading), d["entry"])
-                print("適用: %s（行を追加）" % d["id"])
             d["status"] = "applied"
             applied += 1
             continue
@@ -280,7 +283,10 @@ def apply(findings_path, dataset_dir, qa_dir, report_path=None, dry_run=False):
             keys = [ln.split(",")[0] for ln in file_lines[target]]
             pos = bisect.bisect_left(keys, reading)
             file_lines[target].insert(pos, raw)
-    rejected = [d for d in findings if d["status"] == "rejected"]
+    # rejected は entry を verified.json に登録して再検出を防ぐ。ただし add_row / add_kanji の
+    # entry は「追加候補」であって検証済みの既存行ではない（候補却下 ≠ 行の検証）ので登録しない。
+    rejected = [d for d in findings if d["status"] == "rejected"
+                and d["proposed_fix"]["action"] not in _ADD_ACTIONS]
     if not dry_run:
         for fname, lines in file_lines.items():
             _write_lines(os.path.join(dataset_dir, fname), lines)

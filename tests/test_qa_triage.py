@@ -177,6 +177,31 @@ class TestPhase2Signals:
                if s["type"] == "source_support"]
         assert sig[0]["ndl"] == 7 and sig[0]["jmnedict"] is True
 
+    def test_add_kanji_without_sources_uses_candidate_kanji(self, tmp_path):
+        # sources 無しの add_kanji は行の先頭漢字ではなく候補漢字（value）の根拠を索引から引く。
+        idx = self._idx(tmp_path)
+        src = si.build_index([sc.record("ndl", "given", "彰夫", "あきお", count=6),
+                              sc.record("ndl", "given", "明男", "あきお", count=2)])
+        f = _finding("a", "first_name_man_org.csv", "あきお,akio,明男,風雅", "add_kanji", "彰夫",
+                     check="missing_entry")
+        sig = [s for s in triage_server.compute_signals(f, idx, source_index=src) if s["type"] == "source_support"]
+        assert sig == [{"type": "source_support", "kanji": "彰夫", "ndl": 6, "wikidata": 0, "jmnedict": False}]
+
+    def test_search_url_for_add_kanji_includes_candidate(self, tmp_path):
+        idx = self._idx(tmp_path)
+        fs = [_finding("a", "first_name_man_org.csv", "あきお,akio,明男,風雅", "add_kanji", "彰夫",
+                       check="missing_entry")]
+        items = triage_server.build_items(fs, idx)
+        q = urllib.parse.unquote(items[0]["search_url"])
+        assert "彰夫 あきお 名前" in q
+        assert items[0]["targets"] == []  # 削除対象のハイライトには使わない
+
+    def test_ui_does_not_double_escape_source_support_label(self):
+        with open(triage_server.UI_PATH, encoding="utf-8") as f:
+            html = f.read()
+        label = next(ln for ln in html.splitlines() if "case 'source_support'" in ln)
+        assert "esc(" not in label  # 呼び出し側で esc 済み
+
 
 class TestDatasetIndex:
     def test_rows_and_by_key(self, tmp_path):

@@ -31,6 +31,14 @@ Wikidata（CC0）と国立国会図書館典拠（自由利用）から名の候
      `qa/sources/ndl-work/manifest.json` から該当接頭辞を `done` と `saturated` の
      両方から手で取り除き、`--max-depth`（既定 9）を増やして再実行する
      （`--work` を消すと全接頭辞が再取得になるため、対象接頭辞だけを外すこと）。
+   - 取得失敗時（3 回リトライ後も `RuntimeError: 取得に失敗しました` で止まる、または
+     エンドポイント停止）は、前回のスナップショットで続行してよい。`qa/sources/manifest.json`
+     に記録されている前回の `<date>` のファイル（`qa/sources/wikidata-<date>.jsonl` 等。
+     `.gitignore` 対象なのでローカルに残っているもの）をそのまま手順3の `--sources` に渡し、
+     manifest.json の該当ソースは前回の `fetched_at`/件数を据え置く（そのソースだけ更新
+     しなかったことを手順末尾のコミットメッセージに書く）。ローカルに前回分が無い場合は
+     取得できるようになるまで待つ（ソースを欠いたまま索引を作ると、そのソースの裏付けが
+     0 になり姓の照合や事前承認の判定が変わる）。
 
 3. 索引:
 
@@ -40,7 +48,16 @@ Wikidata（CC0）と国立国会図書館典拠（自由利用）から名の候
      --out qa/sources/index.json
    ```
 
-   `qa/sources/manifest.json` に取得日とレコード数を記録してコミットする（スナップショット本体は追跡しない）。
+   `qa/sources/manifest.json` に取得日とレコード数を記録してコミットする（スナップショット本体は
+   追跡しない）。形式は次のとおり（手書きでよい。`records` は各 JSONL の行数、`prefix_len` は
+   `fetch_ndl.py --prefix-len`、`version` は JMnedict.xml の日付など）:
+
+   ```json
+   {"fetched_at": "YYYY-MM-DD",
+    "wikidata": {"records": N},
+    "ndl": {"records": N, "prefix_len": 3},
+    "jmnedict": {"records": N, "version": "..."}}
+   ```
 
 4. 候補生成:
 
@@ -90,9 +107,12 @@ Wikidata（CC0）と国立国会図書館典拠（自由利用）から名の候
      --source-index qa/sources/index.json
    ```
 
-   `--source-index` を渡すと、別読み行の既存漢字や NDL/Wikidata の件数などの
-   客観シグナルが表示に加わる。事前承認済み（approved）は dry-run で内訳を
-   確認するだけでよい。
+   `--source-index` を渡すと、finding ごとに根拠シグナル `source_support`
+   （NDL n人 / Wikidata m人 / JMnedict ✓）が表示に加わる（`add_row` / `add_kanji` は
+   finding の `sources` を、それ以外は索引を引く）。`add_*` は追加候補なので
+   `entry_stale` / `value_not_in_row` / 別読み行の既存漢字（`dup_elsewhere`）は出ない
+   （これらは remove_kanji 等の既存行向けシグナル）。事前承認済み（approved）は
+   dry-run で内訳を確認するだけでよい。
 
 7. 適用: `/qa-apply` の手順（dry-run → 明示承認 → ブランチ → 適用 → validate/pytest → 件数同期）。
 

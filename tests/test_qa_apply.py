@@ -467,6 +467,43 @@ class TestAddActions:
             "あい,ai,藍,愛\nかおる,kaoru,薫\n"
 
 
+    def test_add_row_dry_run_shows_planned_line_with_entry(self, tmp_path, capsys):
+        # add_row も他 action と同じ「適用予定:」で、追加する行本文（entry）を表示する。
+        ds = self._ds(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        f = self._add("first_name_man_org.csv", "add_row", "いつき,itsuki,樹,一樹")
+        findings_io.append_findings(fp, [f])
+        apply_findings.apply(fp, ds, str(tmp_path / "qa"), dry_run=True)
+        out = capsys.readouterr().out
+        assert "適用予定: id=%s action=add_row" % f["id"] in out
+        assert "いつき,itsuki,樹,一樹" in out and "first_name_man_org.csv" in out
+        assert "適用: " not in out
+        assert open(os.path.join(ds, "first_name_man_org.csv"), encoding="utf-8").read() == \
+            "あい,ai,藍\nかおる,kaoru,薫\n"
+
+    def test_add_row_dry_run_shows_merge_note(self, tmp_path, capsys):
+        ds = self._ds(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        findings_io.append_findings(fp, [self._add("first_name_man_org.csv", "add_row", "あい,ai,愛")])
+        apply_findings.apply(fp, ds, str(tmp_path / "qa"), dry_run=True)
+        assert "（既存行 あい に統合）" in capsys.readouterr().out
+
+    def test_rejected_add_actions_are_not_registered_as_verified(self, tmp_path):
+        # 候補の却下は「行を検証した」ことではないので verified.json には入れない。
+        ds = self._ds(tmp_path)
+        fp = str(tmp_path / "f.jsonl")
+        rej_row = dict(self._add("first_name_man_org.csv", "add_row", "いつき,itsuki,樹"), status="rejected")
+        rej_kanji = dict(self._add("first_name_man_org.csv", "add_kanji", "あい,ai,藍", "愛"), status="rejected")
+        rej_other = dict(_finding("first_name_man_org.csv", "かおる,kaoru,薫", "remove_kanji", "薫",
+                                  status="rejected", check="kanji_reading_mismatch"))
+        findings_io.append_findings(fp, [rej_row, rej_kanji, rej_other])
+        result = apply_findings.apply(fp, ds, str(tmp_path / "qa"))
+        assert result["rejected_verified"] == 1
+        verified = findings_io.load_verified(str(tmp_path / "qa" / "verified.json"))
+        assert list(verified) == [findings_io.entry_hash("first_name_man_org.csv", "かおる,kaoru,薫")]
+        assert [d["status"] for d in findings_io.load_findings(fp)] == ["rejected"] * 3
+
+
 class TestFixReadingRomajiSync:
     """fix_reading 適用時、現在のローマ字が新読みの候補に無ければローマ字も同時に更新する。"""
 

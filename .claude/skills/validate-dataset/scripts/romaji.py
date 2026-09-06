@@ -202,7 +202,13 @@ def preferred_romaji(hira):
     長音は省略しない（さとう→satou）。撥音のアポストロフィ付き（ken'ichi）より
     無し（kenichi）を優先し、残る候補は辞書順で最初のものを採用する。
     qa-update の候補生成と qa-apply の fix_reading で同じ規則を使う。
+    モーラ分割できない小書きの ゕ/ゖ（NDL の ヵ/ヶ 転写由来）は か/け に正規化してから変換する。
     """
-    cands = _combine(_alternatives(tokenize(hira), "keep"))
+    cands = _combine(_alternatives(tokenize(_normalize_small_ka_ke(hira)), "keep"))
     pref = sorted(c for c in cands if "'" not in c) or sorted(cands)
     return pref[0]
+
+
+def _normalize_small_ka_ke(hira):
+    # type: (str) -> str
+    return hira.replace("ゕ", "か").replace("ゖ", "け")

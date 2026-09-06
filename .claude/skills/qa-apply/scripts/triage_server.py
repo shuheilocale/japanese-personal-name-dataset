@@ -155,7 +155,8 @@ def compute_signals(finding, index, source_index=None):
                 "jmnedict": bool(s.get("jmnedict", False))})
         else:
             kind = "surname" if finding["file"] == LAST_NAME_FILE else "given"
-            targets = split_values(value) if action == "remove_kanji" else row["kanji"][:1]
+            # remove_kanji / add_kanji は対象・候補の漢字（value）、それ以外は行の先頭漢字の根拠を引く
+            targets = split_values(value) if action in ("remove_kanji", "add_kanji") else row["kanji"][:1]
             for k in targets:
                 sup = si.support(source_index, kind, k, row["reading"])
                 signals.append(dict({"type": "source_support", "kanji": k}, **sup))
@@ -176,12 +177,15 @@ def build_items(findings, index, source_index=None):
         row = parse_row(d["file"], d["entry"])
         action = d["proposed_fix"]["action"]
         value = d["proposed_fix"].get("value", "")
+        # targets は UI で「削除対象」として強調する漢字（remove_kanji のみ）。
+        # 検索 URL は add_kanji でも候補漢字（value）で引く。
         targets = split_values(value) if action == "remove_kanji" else []
+        search_terms = split_values(value) if action == "add_kanji" else targets
         item = dict(d)
         item.update({
             "row": row, "targets": targets,
             "signals": compute_signals(d, index, source_index),
-            "search_url": search_url(targets, row),
+            "search_url": search_url(search_terms, row),
         })
         items.append(item)
     return items

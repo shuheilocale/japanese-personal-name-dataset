@@ -354,3 +354,48 @@ def test_romaji_for():
     assert gc.romaji_for("いつき") == "itsuki"
     assert gc.romaji_for("けんいち") == "kenichi"
     assert gc.romaji_for("さとう") == "satou"
+
+
+def test_romaji_for_normalizes_small_ka_ke():
+    # NDL の ヵ/ヶ 転写由来の ゕ/ゖ はモーラ分割できないので か/け に正規化してから変換する。
+    assert gc.romaji_for("ゆゕ") == "yuka"
+    assert gc.romaji_for("ゆゖ") == "yuke"
+
+
+def test_generate_survives_small_ka_in_new_reading(tmp_path):
+    ds = gc.load_dataset(_dataset(tmp_path))
+    index = si.build_index([
+        sc.record("wikidata", "given", "由佳", "ゆゕ", gender="female", count=1),
+        sc.record("ndl", "given", "由佳", "ゆゕ", count=6),
+    ])
+    fs, _ = gc.generate(index, ds, ALLOWED | {"由", "佳"}, today="2026-09-06")
+    assert [f["entry"] for f in fs] == ["ゆゕ,yuka,由佳"]
+
+
+class TestThresholdBoundaries:
+    """add_kanji の閾値境界: 候補化は ndl >= min_ndl(2) or wikidata >= 1、事前承認は ndl >= auto_ndl(5) かつ wikidata >= 1。"""
+
+    def _run(self, tmp_path, ndl, wikidata):
+        ds = gc.load_dataset(_dataset(tmp_path))
+        recs = []
+        if ndl:
+            recs.append(sc.record("ndl", "given", "愛", "あい", count=ndl))
+        if wikidata:
+            recs.append(sc.record("wikidata", "given", "愛", "あい", gender="male", count=wikidata))
+        fs, _ = gc.generate(si.build_index(recs), ds, ALLOWED, min_ndl=2, auto_ndl=5, today="2026-09-06")
+        return {f["id"]: f["status"] for f in fs}.get("first_name_man_org.csv:あい:missing_entry:add_kanji:愛")
+
+    def test_ndl_2_is_candidate(self, tmp_path):
+        assert self._run(tmp_path, ndl=2, wikidata=0) == "pending"
+
+    def test_ndl_1_without_wikidata_is_excluded(self, tmp_path):
+        assert self._run(tmp_path, ndl=1, wikidata=0) is None
+
+    def test_ndl_5_with_wikidata_is_approved(self, tmp_path):
+        assert self._run(tmp_path, ndl=5, wikidata=1) == "approved"
+
+    def test_ndl_5_without_wikidata_is_pending(self, tmp_path):
+        assert self._run(tmp_path, ndl=5, wikidata=0) == "pending"
+
+    def test_ndl_4_with_wikidata_is_pending(self, tmp_path):
+        assert self._run(tmp_path, ndl=4, wikidata=1) == "pending"

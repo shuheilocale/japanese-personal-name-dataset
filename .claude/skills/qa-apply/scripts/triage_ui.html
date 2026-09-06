@@ -58,7 +58,7 @@ const SIG_LABEL = s => {
     case 'fix_reading_dup': return '提案読みは既存行と重複';
     case 'value_not_in_row': return `対象漢字が行に無い: ${s.kanji.join('・')}`;
     case 'entry_stale': return s.current ? `entry が現行行と不一致（現行: ${s.current}）` : 'entry が現行行に無い（同キー行なし/複数）';
-    case 'source_support': return `根拠 ${esc(s.kanji)}: NDL ${s.ndl}人 / Wikidata ${s.wikidata}人 / JMnedict ${s.jmnedict ? '✓' : '-'}`;
+    case 'source_support': return `根拠 ${s.kanji}: NDL ${s.ndl}人 / Wikidata ${s.wikidata}人 / JMnedict ${s.jmnedict ? '✓' : '-'}`;
     default: return s.type;
   }
 };
