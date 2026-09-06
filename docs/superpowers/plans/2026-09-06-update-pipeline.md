@@ -266,7 +266,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
   - `build_kanji_list.extract_kanji(wikitext: str, first_per_row: bool = False) -> List[str]` — 表の `[[wikt:X|X]]` 形式の 1 文字リンクを出現順・重複なしで返す。`first_per_row=True` なら各表行（`|-` 区切り）の最初のリンクだけを取る（常用漢字表の「通用字体」列用。旧字体列を拾わない）
   - `build_kanji_list.load_allowed(path) -> set` — 1 行 1 文字のファイルを集合で返す
   - `build_kanji_list.kanji_allowed(text: str, allowed: set) -> bool` — `text` の漢字（CJK 統合漢字）が全て `allowed` に含まれるか。ひらがな・カタカナ・`々ヶヵ` は常に許可
-  - CLI: `python3 build_kanji_list.py --out qa/kanji/jinmei.txt` — Wikipedia API から `常用漢字一覧`（期待 2136 字）と `人名用漢字一覧`（期待 863 字）を取得し、件数が期待と一致しなければ exit 1
+  - CLI: `python3 build_kanji_list.py --out qa/kanji/jinmei.txt` — Wikipedia API から `常用漢字一覧`（期待 2136 字）と `人名用漢字一覧`（期待 864 字。2026-06-26 の戸籍法施行規則改正で 863 字から 864 字に変更）を取得し、件数が期待と一致しなければ exit 1
 
 - [ ] **Step 1: 失敗するテストを書く**
 
@@ -406,7 +406,7 @@ if __name__ == "__main__":
 - [ ] **Step 4: テストが通ることを確認し、実際にリストを生成**
 
 Run: `uv run pytest tests/test_qa_update_kanji.py -v && python3 .claude/skills/qa-update/scripts/build_kanji_list.py`
-Expected: PASS。生成は「常用漢字一覧: 2136 字（期待 2136）」「人名用漢字一覧: 863 字（期待 863）」と表示され `qa/kanji/jinmei.txt` が書かれる（常用と人名用の重複は集合化で解消されるため合計は 3000 未満でよい）。件数が一致しない場合は `_LINK_RE` か表の構造を調べて修正し、一致するまで進めない。
+Expected: PASS。生成は「常用漢字一覧: 2136 字（期待 2136）」「人名用漢字一覧: 864 字（期待 864。2026-06-26 の戸籍法施行規則改正で 863 字から 864 字に変更）」と表示され `qa/kanji/jinmei.txt` が書かれる（常用と人名用の重複は集合化で解消されるため合計は 3000 未満でよい）。件数が一致しない場合は `_LINK_RE` か表の構造を調べて修正し、一致するまで進めない。
 
 - [ ] **Step 5: コミット**
 
