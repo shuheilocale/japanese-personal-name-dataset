@@ -31,7 +31,7 @@ OSS支援申請書の柱「権威あるソースから取得し、漢字⇔読�
 ├── SKILL.md                    # /qa-update の年次運用手順
 └── scripts/
     ├── fetch_wikidata.py       # SPARQL → qa/sources/wikidata-<date>.jsonl
-    ├── fetch_ndl.py            # SPARQL ページング（OFFSET 単位で追記・再開可）→ qa/sources/ndl-<date>.jsonl
+    ├── fetch_ndl.py            # SPARQL を典拠 ID 接頭辞で適応分割（1,000 行上限到達で1桁深く再分割、done/split/saturated を manifest に記録、再開可）→ qa/sources/ndl-<date>.jsonl
     ├── fetch_jmnedict.py       # xml.gz → qa/sources/jmnedict-<date>.jsonl
     ├── source_index.py         # 統一索引の構築
     └── generate_candidates.py  # 現データとの差分 → findings（add_row / add_kanji / 姓の照合）
@@ -81,7 +81,7 @@ qa/kanji/jinmei.txt             # 常用漢字＋人名用漢字の文字集合
 
 ## 7. エラー処理と運用
 
-- 取得は 3 回リトライ（指数バックオフ）。失敗時は前回スナップショットでの続行を提案する。NDL のページングは OFFSET 単位で追記保存し `manifest.json` に進捗を書くことで中断再開できる（176万件、10k/ページ、礼儀的スリープ 1 秒で 30〜60 分の見込み）
+- 取得は 3 回リトライ（指数バックオフ）。失敗時は前回スナップショットでの続行を提案する。NDL の SPARQL は 1 クエリ 1,000 行で打ち切るため、典拠 ID の接頭辞で適応分割して取得する（上限到達時は接頭辞を 1 桁深く再分割、各 leaf の結果と manifest を都度保存して中断再開可。176万件で約 2,000 リクエスト以上、1 秒スリープで 40〜90 分の見込み）。max_depth でも上限に達した接頭辞は saturated として警告し exit 1
 - 全スクリプトで User-Agent（リポジトリ URL 入り）を明示
 - 年次運用手順（SKILL.md）: 取得 → 索引 → 候補生成 → 性別判定バッチ → トリアージ UI → `/qa-apply` → validate/pytest/件数同期 → `/release`
 

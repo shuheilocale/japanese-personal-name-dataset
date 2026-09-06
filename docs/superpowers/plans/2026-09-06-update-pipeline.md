@@ -612,9 +612,10 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
   - `fetch_ndl.build_query(prefix: str) -> str` — `FILTER(STRSTARTS(STR(?s), "http://id.ndl.go.jp/auth/ndlna/<prefix>"))` を含む SELECT
   - `fetch_ndl.parse_label(label: str) -> Optional[Tuple[str, str]]` — `"夏目, 漱石, 1867-1916"` → `("夏目", "漱石")`。名が無い・各部が日本人名の文字でない場合は None
   - `fetch_ndl.parse_yomi(yomi: str) -> Optional[Tuple[str, str]]` — `"ナツメ, ソウセキ, 1867-1916"` → `("なつめ", "そうせき")`
-  - `fetch_ndl.bindings_to_records(bindings: List[dict]) -> List[dict]` — `xml:lang == "ja-Kana"` の行だけを使い、given と surname のレコード（count=1）を返す
+  - `fetch_ndl.bindings_to_records(bindings: List[dict]) -> List[dict]` — `xml:lang` が大文字小文字を無視して `ja-kana` の行だけを使い、given と surname のレコード（count=1）を返す
   - `fetch_ndl.aggregate(records) -> List[dict]` — `(source, kind, kanji, reading)` で count を合計
-  - CLI: `python3 fetch_ndl.py --out qa/sources/ndl-<date>.jsonl [--prefix-len 3] [--work qa/sources/ndl-work]` — 接頭辞 `000`〜`999` を順に取得し、接頭辞ごとの結果を `--work` に保存して再開できる（`manifest.json` に完了接頭辞を記録）
+  - `fetch_ndl.fetch_prefixes(prefixes, work, fetch=None, cap=1000, max_depth=9)` — cap 以上の接頭辞は 1 桁深く再分割（manifest の split）。leaf は done。max_depth でも cap 以上は saturated。完了接頭辞は再実行でスキップ
+  - CLI: `python3 fetch_ndl.py --out qa/sources/ndl-<date>.jsonl [--prefix-len 3] [--work qa/sources/ndl-work] [--cap 1000] [--max-depth 9]` — 適応分割で接頭辞を取得。saturated 接頭辞があれば exit 1
 
 - [ ] **Step 1: 失敗するテストを書く**
 
@@ -2121,7 +2122,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 実装ではなく運用タスク。各段階でユーザーの確認を挟む。
 
-- [ ] **Step 1: 実取得（スモーク）** — `fetch_wikidata.py` を実行し件数（Wikidata 男 3,109 / 女 772 / 中性 297 前後、姓 11,000 前後）を報告。`fetch_ndl.py` を実行（長時間。`--prefix-len 3` で 1,000 リクエスト、失敗時は再実行で再開）し、集計後の given/surname レコード数を報告。`fetch_jmnedict.py` を実行。
+- [ ] **Step 1: 実取得（スモーク）** — `fetch_wikidata.py` を実行し件数（Wikidata 男 3,109 / 女 772 / 中性 297 前後、姓 11,000 前後）を報告。`fetch_ndl.py` を実行（長時間。適応分割により 2,000 リクエスト以上、1 秒スリープで 40〜90 分の見込み。失敗時は再実行で再開）し、集計後の given/surname レコード数を報告。`fetch_jmnedict.py` を実行。
 - [ ] **Step 2: 索引と候補生成** — `source_index.py`、`generate_candidates.py` を実行し、findings の内訳（add_kanji / add_row / 姓の照合、approved / pending 件数、性別判定待ち件数）を報告。`qa/sources/manifest.json` を書いてコミット。
 - [ ] **Step 3: 性別判定バッチ** — `gender_batch.py prep` → サブエージェント → `merge`。
 - [ ] **Step 4: トリアージ** — UI を起動し、`source_support` シグナルを見ながらユーザーが判断（事前承認分は内訳確認のみ）。
