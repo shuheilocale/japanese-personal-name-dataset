@@ -24,8 +24,10 @@ Wikidata（CC0）と国立国会図書館典拠（自由利用）から名の候
    ```
 
    - `fetch_ndl.py` は典拠 ID の接頭辞ごとに `--work`（既定 `qa/sources/ndl-work`）
-     に結果と `manifest.json`（done/split/saturated）を保存する。初回は 40〜90 分
-     かかる想定。中断してもそのまま同じコマンドを再実行すれば `done`/`split` 済みの
+     に結果と `manifest.json`（done/split/saturated）を保存する。初回は約 14 時間かかる
+     （2026-09 実測: 接頭辞 9,973 件・分割 997 件・生データ約 149 万行 → 集約 209,511 件）。
+     `nohup python3 $S/fetch_ndl.py ... > ndl.log 2>&1 &` で切り離し、`manifest.json` の
+     `done` 件数で進捗を見るとよい（stdout はブロックバッファされるためログは遅れる）。中断してもそのまま同じコマンドを再実行すれば `done`/`split` 済みの
      接頭辞をスキップして再開する。
    - 終了コード 1（`saturated` あり）が出た場合はデータ欠損の可能性がある。
      `qa/sources/ndl-work/manifest.json` から該当接頭辞を `done` と `saturated` の
