@@ -41,11 +41,26 @@ class TestGenerate:
         ds = gc.load_dataset(_dataset(tmp_path))
         fs, pending = gc.generate(_index(), ds, ALLOWED, min_ndl=2, auto_ndl=5, today="2026-09-06")
         by_id = {f["id"]: f for f in fs}
-        f = by_id["first_name_man_org.csv:あい:missing_entry:add_kanji"]
+        f = by_id["first_name_man_org.csv:あい:missing_entry:add_kanji:愛"]
         assert f["proposed_fix"] == {"action": "add_kanji", "value": "愛"}
         assert f["status"] == "pending"  # female と man ファイルが矛盾 → 事前承認しない
         assert f["sources"] == {"ndl": 9, "wikidata": 2, "jmnedict": False}
         assert "哀" not in json.dumps(fs, ensure_ascii=False)
+
+    def test_add_kanji_ids_unique_when_multiple_candidates_share_reading(self, tmp_path):
+        # 同一読み「あい」に2つの add_kanji 候補（愛・哀）がある場合、id が衝突しないこと。
+        ds = gc.load_dataset(_dataset(tmp_path))
+        index = si.build_index([
+            sc.record("ndl", "given", "愛", "あい", count=9),
+            sc.record("ndl", "given", "哀", "あい", count=3),
+        ])
+        fs, _ = gc.generate(index, ds, ALLOWED, min_ndl=2, auto_ndl=5, today="2026-09-06")
+        ids = [f["id"] for f in fs if f["proposed_fix"]["action"] == "add_kanji"]
+        assert len(ids) == 2 and len(set(ids)) == 2
+        assert set(ids) == {
+            "first_name_man_org.csv:あい:missing_entry:add_kanji:愛",
+            "first_name_man_org.csv:あい:missing_entry:add_kanji:哀",
+        }
 
     def test_add_row_with_wikidata_gender_is_auto_approved(self, tmp_path):
         ds = gc.load_dataset(_dataset(tmp_path))
@@ -72,6 +87,30 @@ class TestGenerate:
         s = next(x for x in fs if x["file"] == "last_name_org.csv")
         assert s["entry"] == "金子,100,きんす,kinsu" and s["proposed_fix"] == {"action": "fix_reading", "value": "かねこ"}
         assert not [x for x in fs if x["file"] == "last_name_org.csv" and "佐藤" in x["entry"]]
+
+    def test_surname_mismatch_ids_unique_for_shared_current_reading(self, tmp_path):
+        # 阿部・安部のように別の漢字が同じ（誤った）現行読みを持つ場合でも id が衝突しないこと。
+        d = tmp_path / "dataset2"
+        d.mkdir()
+        (d / "first_name_man_org.csv").write_text("", encoding="utf-8")
+        (d / "first_name_man_opti.csv").write_text("", encoding="utf-8")
+        (d / "first_name_woman_org.csv").write_text("", encoding="utf-8")
+        (d / "first_name_woman_opti.csv").write_text("", encoding="utf-8")
+        (d / "last_name_org.csv").write_text(
+            "阿部,100,きんす,kinsu\n安部,50,きんす,kinsu\n", encoding="utf-8")
+        ds = gc.load_dataset(str(d))
+        index = si.build_index([
+            sc.record("ndl", "surname", "阿部", "あべ", count=80),
+            sc.record("ndl", "surname", "安部", "あべ", count=40),
+        ])
+        fs, _ = gc.generate(index, ds, ALLOWED, today="2026-09-06")
+        assert len(fs) == 2
+        ids = [f["id"] for f in fs]
+        assert len(ids) == len(set(ids)) == 2
+        assert set(ids) == {
+            "last_name_org.csv:阿部:kanji_reading_mismatch:fix_reading",
+            "last_name_org.csv:安部:kanji_reading_mismatch:fix_reading",
+        }
 
     def test_max_candidates(self, tmp_path):
         ds = gc.load_dataset(_dataset(tmp_path))

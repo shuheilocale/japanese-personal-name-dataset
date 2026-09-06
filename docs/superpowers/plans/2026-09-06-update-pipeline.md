@@ -1438,7 +1438,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
     - 除外: `kanji_allowed(kanji, allowed)` が False の表記は候補にしない
     - 姓: `dataset["surnames"]` の各 (kanji, reading) について、索引 pairs に `surname|kanji|*` が 1 つ以上あり、現 reading の pair が無い場合 `kanji_reading_mismatch`（file=last_name_org.csv、entry=現行行、fix_reading=索引で ndl 最多の読み、confidence=medium）
     - 上限: add_* findings を `ndl + wikidata` 降順に並べ `max_candidates` 件で切る（姓の findings は対象外）
-    - id: `<file>:<reading>:missing_entry:add_row` / `<file>:<reading>:missing_entry:add_kanji`、`sources` フィールド、`evidence` = `"NDL 12人 / Wikidata 3人 / JMnedict ✓"`
+    - id: `<file>:<reading>:missing_entry:add_row`（読みごとに1件のため一意） / `<file>:<reading>:missing_entry:add_kanji:<value>`（同一読みに複数の追加漢字候補があり得るため追加漢字を id に含めて一意化） / 姓の照合は `<file>:<漢字>:kanji_reading_mismatch:fix_reading`（entry の1列目=漢字を使う。読みは誤りうるため id には使わない）。`sources` フィールド、`evidence` = `"NDL 12人 / Wikidata 3人 / JMnedict ✓"`。id の一意性は `generate()` の最後でアサートし、重複があれば `ValueError`
   - `generate_candidates.carry_over(new, existing) -> List[dict]` — 同 id の既存 status を引き継ぐ（applied/rejected/approved/pending）
   - CLI: `python3 generate_candidates.py --index qa/sources/index.json --dataset-dir ... --out qa/findings/<run-id>-update.jsonl --gender-pending qa/work/<run-id>/gender_pending.json [--min-ndl 2 --auto-ndl 5 --max-candidates 2000]`
 
@@ -1558,6 +1558,7 @@ import datetime
 import json
 import os
 import sys
+from collections import Counter
 from typing import Dict, List, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -1605,9 +1606,15 @@ def _evidence(sup):
 def _finding(file, entry, action, value, sup, status, today, check="missing_entry", confidence="high",
              extra_evidence=""):
     # type: (...) -> dict
-    reading = entry.split(",")[0] if file != LAST else entry.split(",")[2]
+    # 名ファイルは entry の1列目が読み、姓ファイルは1列目が漢字。add_kanji は同一
+    # (file, key) に複数候補があり得るため value（追加する漢字）を id に含めて一意化する。
+    key = entry.split(",")[0]
+    if action == "add_kanji":
+        fid = "%s:%s:%s:%s:%s" % (file, key, check, action, value)
+    else:
+        fid = "%s:%s:%s:%s" % (file, key, check, action)
     return {
-        "id": "%s:%s:%s:%s" % (file, reading, check, action), "file": file, "entry": entry,
+        "id": fid, "file": file, "entry": entry,
         "check": check, "severity": "warning", "confidence": confidence,
         "evidence": _evidence(sup) + extra_evidence,
         "proposed_fix": {"action": action, "value": value}, "status": status,
@@ -1686,7 +1693,11 @@ def generate(index, dataset, allowed, min_ndl=2, auto_ndl=5, max_candidates=2000
             LAST, raw, "fix_reading", best, sup, "pending", today,
             check="kanji_reading_mismatch", confidence="medium",
             extra_evidence="（索引の読み: %s。現データの読み %s は索引に無い）" % ("・".join(sorted(alts)), reading)))
-    return adds + surname_findings, gender_pending
+    all_findings = adds + surname_findings
+    dupes = sorted(i for i, n in Counter(f["id"] for f in all_findings).items() if n > 1)
+    if dupes:
+        raise ValueError("finding id が重複しています: %s" % ", ".join(dupes))
+    return all_findings, gender_pending
 
 
 def dataset_romaji(dataset, fn, reading):
@@ -1696,7 +1707,7 @@ def dataset_romaji(dataset, fn, reading):
 
 def _surname_rows(dataset, kanji, reading):
     # type: (dict, str, str) -> List[List[str]]
-    return dataset.get("_surname_rows", {}).get(kanji, [])
+    return [r for r in dataset.get("_surname_rows", {}).get(kanji, []) if r[2] == reading]
 
 
 def carry_over(new, existing):
