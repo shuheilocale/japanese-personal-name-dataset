@@ -91,5 +91,6 @@ os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, 'dataset/...
 - `/validate-dataset`: 決定的チェック（形式・重複・読み⇔ローマ字照合・クロスファイル整合性）
 - `/qa-review`: LLM 品質レビュー（漢字⇔読みの妥当性・人名らしさ・男女配置）。疑義は `qa/findings/*.jsonl` に、検証済みは `qa/verified.json` に記録
 - `/qa-apply`: 承認済み findings の一括適用（ユーザーの明示承認必須）。承認判断は `triage_server.py` のローカル UI で行う
+- `/qa-update`: 外部ソース（Wikidata・NDL典拠）からの年次更新。候補は add_row/add_kanji の findings として台帳に入る。設計書: `docs/superpowers/specs/2026-09-05-update-pipeline-design.md`
 - 設計書: `docs/superpowers/specs/2026-07-27-qa-foundation-design.md`
 - リリース前の互換性レビューは `py38-compat-reviewer` サブエージェントを使用

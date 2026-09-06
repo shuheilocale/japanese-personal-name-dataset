@@ -21,6 +21,16 @@ python3 .claude/skills/qa-apply/scripts/triage_server.py \
   --dataset-dir japanese_personal_name_dataset/dataset
 ```
 
+`/qa-update` の候補（NDL・Wikidata由来）を判断する場合は `--source-index` で索引を渡すと、
+別読み行の既存漢字や出典件数などのシグナルが表示に加わる:
+
+```bash
+python3 .claude/skills/qa-apply/scripts/triage_server.py \
+  --findings qa/findings/<run-id>.jsonl \
+  --dataset-dir japanese_personal_name_dataset/dataset \
+  --source-index qa/sources/index.json
+```
+
 行単位でキー操作（a=承認 / r=却下 / s=保留 / u=取り消し / j,k=移動）。左のフィルタで絞り込み、「表示中を一括承認/却下」で同種の疑義をまとめて処理できる（applied は対象外）。客観シグナル（別読み行に同一漢字あり・接尾辞ルール違反・提案読みの重複・対象漢字が行に無い・entry が現行行と不一致）が ⚑ で表示される。判断後はこのスキルの手順で適用する。
 
 **UI で判断した場合は /qa-apply の `--from-report` を付けない。** `--from-report` は古いレポートの
