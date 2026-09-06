@@ -92,3 +92,15 @@ def http_get(url, params=None, headers=None, retries=3, timeout=120, sleep=1.0, 
             if attempt < retries - 1 and sleep:
                 time.sleep(sleep * (2 ** attempt))
     raise RuntimeError("取得に失敗しました（%d 回試行）: %s: %s" % (retries, url[:80], last))
+
+
+def force_utf8_output():
+    # type: () -> None
+    """stdout/stderr を UTF-8 に再設定する（Windows の cp1252 コンソールで日本語出力が落ちるのを防ぐ）。
+
+    各 CLI の `if __name__ == "__main__":` で main() の前に呼ぶ。argparse の --help も
+    日本語を含むため、parse_args より前に済ませる必要がある。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure") and (stream.encoding or "").lower() not in ("utf-8", "utf8"):
+            stream.reconfigure(encoding="utf-8", errors="replace")

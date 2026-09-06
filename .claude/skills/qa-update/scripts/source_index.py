@@ -99,6 +99,7 @@ if __name__ == "__main__":
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import sources_common as sc
 
+    sc.force_utf8_output()
     parser = argparse.ArgumentParser(description="正規化 JSONL から統一索引を作る")
     parser.add_argument("--sources", nargs="+", required=True, help="正規化 JSONL ファイル")
     parser.add_argument("--out", default=os.path.join("qa", "sources", "index.json"))

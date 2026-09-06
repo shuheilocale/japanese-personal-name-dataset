@@ -199,4 +199,5 @@ def main():
 
 
 if __name__ == "__main__":
+    sc.force_utf8_output()
     sys.exit(main())

@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(
     os.pardir, os.pardir, "validate-dataset", "scripts")))
 
 import findings_io  # noqa: E402
+import sources_common as sc  # noqa: E402
 import generate_candidates as gc  # noqa: E402
 
 DECISIONS = ("male", "female", "unisex", "unknown")
@@ -99,4 +100,5 @@ def main():
 
 
 if __name__ == "__main__":
+    sc.force_utf8_output()
     sys.exit(main())

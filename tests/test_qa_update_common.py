@@ -1,6 +1,8 @@
 """sources_common.py（qa-update 共通ユーティリティ）のテスト。"""
 import io
 import os
+import subprocess
+import sys
 
 import pytest
 
@@ -80,3 +82,25 @@ class TestHttpGet:
             raise OSError("boom")
         with pytest.raises(RuntimeError):
             sc.http_get("http://example.invalid/x", opener=opener, sleep=0, retries=2)
+
+
+CLI_SCRIPTS = [
+    "build_kanji_list.py", "fetch_jmnedict.py", "fetch_ndl.py", "fetch_wikidata.py",
+    "gender_batch.py", "generate_candidates.py", "source_index.py",
+]
+
+
+@pytest.mark.parametrize("script", CLI_SCRIPTS)
+def test_cli_help_survives_non_utf8_stdout(script):
+    """Windows の cp1252 コンソールを PYTHONIOENCODING で模し、日本語ヘルプが落ちないことを確認する。
+
+    CI の windows-latest では stdout が cp1252 になり、argparse の日本語 help が
+    UnicodeEncodeError で終了コード 1 になった。各 CLI は起動時に stdout/stderr を
+    UTF-8 に再設定する必要がある。subprocess で素の Python プロセスから実行する。
+    """
+    scripts_dir = os.path.dirname(os.path.abspath(sc.__file__))
+    env = dict(os.environ, PYTHONIOENCODING="cp1252")
+    result = subprocess.run([sys.executable, os.path.join(scripts_dir, script), "--help"],
+                            capture_output=True, env=env)
+    assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
+    assert "usage" in result.stdout.decode("utf-8", "replace")
