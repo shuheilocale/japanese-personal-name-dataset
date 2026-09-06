@@ -416,12 +416,27 @@ class TestMergeLedger:
         assert [d["id"] for d in out] == [regen["id"]]
         assert out[0]["status"] == "pending" and gc.DROPPED_NOTE not in out[0]["evidence"]
 
-    def test_re_approved_demoted_finding_is_demoted_again(self):
-        # 候補外のまま UI で再承認しても、次の生成で再び pending に戻る（根拠なしの適用を防ぐ）。
+    def test_re_approved_demoted_finding_is_kept(self):
+        # 候補外のまま UI で再承認したもの（approved かつ DROPPED_NOTE 付き = 人の判断でしか作れない状態）は
+        # 次の生成でも approved のまま保持し、再び pending に戻さない。注記も重複しない。
         demoted = gc.merge_ledger([], self._unregenerated())[0]
         demoted["status"] = "approved"
         out = gc.merge_ledger([], [demoted])
-        assert out[0]["status"] == "pending" and out[0]["evidence"].count(gc.DROPPED_NOTE) == 1
+        assert [d["id"] for d in out][0] == demoted["id"]
+        assert out[0]["status"] == "approved" and out[0]["evidence"].count(gc.DROPPED_NOTE) == 1
+        again = gc.merge_ledger([], out)
+        assert json.dumps(again, ensure_ascii=False) == json.dumps(out, ensure_ascii=False)
+
+    def test_re_approved_demoted_finding_regenerated_later_carries_approved(self):
+        # 候補に戻って通常生成された場合は完全一致で approved を引き継ぎ、evidence は新しいものに置き換わる。
+        demoted = gc.merge_ledger([], self._unregenerated())[0]
+        demoted["status"] = "approved"
+        regen = _f("first_name_man_org.csv:けんいち:missing_entry:add_kanji:兼市", "pending",
+                   entry="けんいち,kenichi,健一", action="add_kanji", value="兼市", today="2026-10-01")
+        out = gc.merge_ledger([regen], [demoted])
+        assert [d["id"] for d in out] == [regen["id"]]
+        assert out[0]["status"] == "approved" and out[0]["detected_at"] == "2026-09-06"
+        assert out[0]["evidence"] == "NDL 7人 / Wikidata 1人 / JMnedict -"
 
 
 def test_detected_by_constant():

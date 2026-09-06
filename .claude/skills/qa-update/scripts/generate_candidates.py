@@ -263,11 +263,14 @@ def merge_ledger(new, existing):
 
     - detected_by が DETECTED_BY 以外（gender_batch merge 由来の add_row など）: そのまま保持
     - 自前の applied / rejected（監査証跡）: そのまま保持
-    - 自前の approved: 索引更新・閾値変更・cap 外れで根拠が消えたのに /qa-apply で
+    - 自前の approved（事前承認）: 索引更新・閾値変更・cap 外れで根拠が消えたのに /qa-apply で
       適用されないよう pending に戻し、evidence 末尾に DROPPED_NOTE を付ける
-    - 自前の pending: 候補外になったので落とす。ただし DROPPED_NOTE 付き（上で pending に
-      戻したもの）は利用者が判断するまで残す（再実行で注記は重複させない → バイト一致）
+    - DROPPED_NOTE 付き（上で pending に戻したもの、およびそれを UI で再承認したもの）: 利用者の
+      判断を尊重してそのまま残す。approved かつ DROPPED_NOTE 付きは事前承認では作れない
+      （注記は降格時にしか付かない）ので、人の再承認と一意に判別できる
+    - それ以外の自前の pending: 候補外になったので落とす
 
+    再実行で注記は重複させない（同じ索引で 2 回実行するとバイト一致）。
     出力順は 保持分（既存順）→ 今回の生成分（generate の順）で決定的。
     """
     new_ids = {d["id"] for d in new}
@@ -279,12 +282,9 @@ def merge_ledger(new, existing):
         evidence = d.get("evidence") or ""
         if d.get("detected_by") != DETECTED_BY or status in ("applied", "rejected"):
             kept.append(d)
-        elif status == "approved":
-            demoted = dict(d, status="pending")
-            if not evidence.endswith(DROPPED_NOTE):
-                demoted["evidence"] = evidence + DROPPED_NOTE
-            kept.append(demoted)
-        elif status == "pending" and evidence.endswith(DROPPED_NOTE):
+        elif status == "approved" and not evidence.endswith(DROPPED_NOTE):
+            kept.append(dict(d, status="pending", evidence=evidence + DROPPED_NOTE))
+        elif status in ("pending", "approved") and evidence.endswith(DROPPED_NOTE):
             kept.append(d)
     return kept + carry_over(new, existing)
 
