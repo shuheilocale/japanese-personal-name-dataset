@@ -185,7 +185,7 @@ Typical uses: test data and seed data for web apps, input validation, Japanese l
 
 ## Contributing
 
-Issues and pull requests are welcome. See [CONTRIBUTING.md](https://github.com/shuheilocale/japanese-personal-name-dataset/blob/main/CONTRIBUTING.md) for the development setup and how data corrections are reviewed.
+Issues and pull requests are welcome. Data corrections are the most helpful — use the [data correction form](https://github.com/shuheilocale/japanese-personal-name-dataset/issues/new?template=data_correction.yml). See [CONTRIBUTING.md](https://github.com/shuheilocale/japanese-personal-name-dataset/blob/main/CONTRIBUTING.md) for the development setup and how data corrections are reviewed.
 
 ## License
 

@@ -1,0 +1,17 @@
+name: Feature request / 機能要望
+description: Suggest a new function, data field or format.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Use case / 用途
+      description: What are you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal / 提案
+    validations:
+      required: true

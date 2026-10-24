@@ -1,0 +1,49 @@
+name: Data correction / データ修正
+description: Report a wrong reading, romaji, kanji spelling or gender file. 読み・ローマ字・漢字・男女の誤りを報告する
+title: "[Data] "
+labels: ["data"]
+body:
+  - type: dropdown
+    id: file
+    attributes:
+      label: File / ファイル
+      options:
+        - first_name_man (male first names / 男性の名)
+        - first_name_woman (female first names / 女性の名)
+        - last_name (last names / 姓)
+    validations:
+      required: true
+  - type: input
+    id: entry
+    attributes:
+      label: Current entry / 現在の行
+      description: Copy the row or give the reading/kanji. 該当行、または読み・漢字
+      placeholder: "あい,ai,藍,愛"
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Problem / 問題の種類
+      options:
+        - Wrong reading / 読みが違う
+        - Wrong romaji / ローマ字が違う
+        - Kanji does not match the reading / 漢字と読みが合わない
+        - Not a given name (pen name, title, etc.) / 名ではない（号・称号など）
+        - Wrong gender file / 男女のファイルが違う
+        - Missing name / 名前が無い
+        - Other / その他
+    validations:
+      required: true
+  - type: input
+    id: proposed
+    attributes:
+      label: Proposed correction / 修正案
+      placeholder: "remove 藍 / reading should be あいり"
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence / 根拠
+      description: A source helps a lot (dictionary, Wikipedia, NDL authority, etc.). 出典があると助かります

@@ -1,0 +1,24 @@
+name: Bug report / 不具合報告
+description: Something in the Python API does not work as expected.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened / 何が起きたか
+      description: Include a minimal code example and the output or traceback.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior / 期待した動作
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versions / バージョン
+      placeholder: "package 0.3.0, Python 3.12, Windows 11"
+    validations:
+      required: true

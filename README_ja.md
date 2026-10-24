@@ -179,7 +179,7 @@ CSV は `japanese_personal_name_dataset/dataset/` にあります（UTF-8、改�
 
 ## コントリビュート
 
-Issue や Pull Request を歓迎します。開発環境の用意やデータ修正のレビュー方法は [CONTRIBUTING.md](https://github.com/shuheilocale/japanese-personal-name-dataset/blob/main/CONTRIBUTING.md) を参照してください。
+Issue や Pull Request を歓迎します。特にデータの誤り報告は [データ修正フォーム](https://github.com/shuheilocale/japanese-personal-name-dataset/issues/new?template=data_correction.yml) からお願いします。開発環境の用意やデータ修正のレビュー方法は [CONTRIBUTING.md](https://github.com/shuheilocale/japanese-personal-name-dataset/blob/main/CONTRIBUTING.md) を参照してください。
 
 ## ライセンス
 
