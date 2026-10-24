@@ -24,6 +24,7 @@ A dataset of Japanese personal names — first names and last names — with hir
 - [Quick start](#quick-start)
 - [API reference](#api-reference)
 - [Dataset](#dataset)
+- [JSON and SQLite downloads](#json-and-sqlite-downloads)
 - [Data sources and quality](#data-sources-and-quality)
 - [Examples](#examples)
 - [Contributing](#contributing)
@@ -158,6 +159,23 @@ The CSV files live in `japanese_personal_name_dataset/dataset/` (UTF-8, LF line 
 | Male (popular) | 45 | 26 | 446 |
 | Female (full) | 11 | 2 | 394 |
 | Female (popular) | 50 | 32 | 287 |
+
+## JSON and SQLite downloads
+
+Each [GitHub release](https://github.com/shuheilocale/japanese-personal-name-dataset/releases) has the whole dataset attached in two more formats, generated from the CSV files:
+
+- `japanese_names.json` — male and female first names, last names and birth-decade metadata in one file
+- `japanese_names.sqlite` — the same data as tables: `first_names`, `first_name_kanji`, `last_names`, `birth_decades`, `metadata`
+
+```sql
+-- Spellings of the male name "ひろし"
+SELECT k.kanji FROM first_names f JOIN first_name_kanji k ON k.first_name_id = f.id
+WHERE f.gender = 'male' AND f.reading = 'ひろし' ORDER BY k.position;
+```
+
+`birth_decades` counts people born in each decade among those listed in the National Diet Library authorities and Wikidata who have the name. It reflects notable people such as authors, not national birth statistics, so treat it as a rough sense of era rather than popularity. Cells with fewer than 3 people are omitted.
+
+To build the files yourself, run `python scripts/build_formats.py --out build/`.
 
 ## Data sources and quality
 

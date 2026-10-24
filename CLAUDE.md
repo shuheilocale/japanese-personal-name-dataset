@@ -77,6 +77,8 @@ os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, 'dataset/...
 
 ## パッケージ配布
 
+JSON / SQLite 版は `scripts/build_formats.py` が CSV（正本）と `qa/metadata/birth_decades.csv`（生年代、`build_birth_decades.py` で生成）から作り、リリース時に publish.yml の `release-assets` ジョブが GitHub Releases に添付する。PyPI パッケージには含めない。設計: `docs/superpowers/specs/2026-10-24-formats-and-era-metadata-design.md`
+
 `MANIFEST.in` に `recursive-include dataset *.csv` を記述することで、パッケージ配布時にCSVファイルが確実に含まれるようになっています。
 
 リリースは GitHub リリースの作成をトリガーに `.github/workflows/publish.yml` が PyPI へ公開します。手順は `/release` スキル（`.claude/skills/release/SKILL.md`）を参照。

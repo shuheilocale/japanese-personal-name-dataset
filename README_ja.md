@@ -24,6 +24,7 @@
 - [使い方](#使い方)
 - [API 一覧](#api-一覧)
 - [データ仕様](#データ仕様)
+- [JSON・SQLite 版](#jsonsqlite-版)
 - [データの出典と品質](#データの出典と品質)
 - [サンプルコード](#サンプルコード)
 - [コントリビュート](#コントリビュート)
@@ -152,6 +153,23 @@ CSV は `japanese_personal_name_dataset/dataset/` にあります（UTF-8、改�
 | 男性（最適化版） | 45 | 26 | 446 |
 | 女性（完全版） | 11 | 2 | 394 |
 | 女性（最適化版） | 50 | 32 | 287 |
+
+## JSON・SQLite 版
+
+[GitHub のリリース](https://github.com/shuheilocale/japanese-personal-name-dataset/releases) ごとに、CSV から生成した 2 つの形式を添付しています。
+
+- `japanese_names.json` — 男女の名・姓・生年代メタデータを 1 ファイルに収録
+- `japanese_names.sqlite` — 同じ内容のテーブル（`first_names`・`first_name_kanji`・`last_names`・`birth_decades`・`metadata`）
+
+```sql
+-- 男性の名「ひろし」の表記
+SELECT k.kanji FROM first_names f JOIN first_name_kanji k ON k.first_name_id = f.id
+WHERE f.gender = 'male' AND f.reading = 'ひろし' ORDER BY k.position;
+```
+
+`birth_decades` は、国立国会図書館の典拠と Wikidata に載っている人物のうち、その名を持つ人の生年を 10 年ごとに数えたものです。著者などの著名人の分布であり、出生数の統計ではありません。人気度ではなく、おおまかな「時代感」の目安として使ってください。3 人未満の年代は載せていません。
+
+自分で生成するには `python scripts/build_formats.py --out build/` を実行します。
 
 ## データの出典と品質
 
