@@ -123,6 +123,17 @@ Wikidata（CC0）と国立国会図書館典拠（自由利用）から名の候
 
 7. 適用: `/qa-apply` の手順（dry-run → 明示承認 → ブランチ → 適用 → validate/pytest → 件数同期）。
 
+7.5. 生年代メタデータ（JSON/SQLite 版の `birth_decades`）を更新する。`fetch_wikidata.py` に
+   `--birth-decades-out qa/sources/wikidata-births-<date>.jsonl` を付けて取得しておき、適用後のデータで集計する:
+
+   ```bash
+   python3 $S/build_birth_decades.py --ndl-work qa/sources/ndl-work \
+     --sources qa/sources/wikidata-births-<date>.jsonl --out qa/metadata/birth_decades.csv
+   python3 scripts/build_formats.py --out build/   # 読み戻し検証まで行う
+   ```
+
+   `qa/metadata/birth_decades.csv` はコミットする（リリース時に CI が JSON/SQLite に組み込む）。
+
 8. 件数同期: 行数が変わった場合は `CLAUDE.md`（データセット構造の件数）と
    `README.md` / `README_ja.md`（データ件数）を更新する（`/qa-apply` 手順6と同じ対象）。
 
