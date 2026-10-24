@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "japanese-personal-name-dataset"
 version = "0.3.0"
 description = "A comprehensive dataset of Japanese personal names (first names and last names) with hiragana readings, romaji, and kanji variations"
-readme = "README_EN.md"
+readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
@@ -41,7 +41,7 @@ include = [
     "japanese_personal_name_dataset/",
     "tests/",
     "README.md",
-    "README_EN.md",
+    "README_ja.md",
     "LICENSE",
     "CLAUDE.md",
 ]

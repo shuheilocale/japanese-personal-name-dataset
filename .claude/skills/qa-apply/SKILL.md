@@ -73,7 +73,7 @@ python3 .claude/skills/qa-apply/scripts/rebase_findings.py \
    uv run pytest tests/ -v
    ```
 6. 行数が変わった場合は以下の件数表記をすべて更新する:
-   - `README.md` / `README_EN.md`（データ件数）
+   - `README.md` / `README_ja.md`（データ件数）
    - `CLAUDE.md`（データセット構造の件数）
    - `tests/test_core.py`（期待件数のアサーション）
    - `.claude/skills/validate-dataset/SKILL.md`（期待行数）

@@ -124,7 +124,7 @@ Wikidata（CC0）と国立国会図書館典拠（自由利用）から名の候
 7. 適用: `/qa-apply` の手順（dry-run → 明示承認 → ブランチ → 適用 → validate/pytest → 件数同期）。
 
 8. 件数同期: 行数が変わった場合は `CLAUDE.md`（データセット構造の件数）と
-   `README.md` / `README_EN.md`（データ件数）を更新する（`/qa-apply` 手順6と同じ対象）。
+   `README.md` / `README_ja.md`（データ件数）を更新する（`/qa-apply` 手順6と同じ対象）。
 
 9. リリース: `/release <version>`（データ追加はマイナーバージョンを上げる）。
 
