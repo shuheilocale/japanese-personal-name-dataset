@@ -8,7 +8,7 @@ import datetime
 import json
 import os
 import sys
-from typing import List
+from typing import List, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -30,6 +30,18 @@ def build_query(kind, qid):
         "?item wdt:P31 wd:%s ; wdt:P407 wd:Q5287 ; wdt:P1814 ?kana ; rdfs:label ?label . "
         "FILTER(LANG(?label)=\"ja\") OPTIONAL { ?h %s ?item } } "
         "GROUP BY ?label ?kana" % (qid, prop))
+
+
+def build_birth_query(kind, qid):
+    # type: (str, str) -> str
+    """名・姓の項目ごとに、その名を持つ人物の生年を 10 年刻みで数える（生年代メタデータ用）。"""
+    prop = "wdt:P735" if kind == "given" else "wdt:P734"
+    return (
+        "SELECT ?label ?kana ?decade (COUNT(DISTINCT ?h) AS ?people) WHERE { "
+        "?item wdt:P31 wd:%s ; wdt:P407 wd:Q5287 ; wdt:P1814 ?kana ; rdfs:label ?label . "
+        "FILTER(LANG(?label)=\"ja\") ?h %s ?item ; wdt:P569 ?born . "
+        "BIND(FLOOR(YEAR(?born) / 10) * 10 AS ?decade) } "
+        "GROUP BY ?label ?kana ?decade" % (qid, prop))
 
 
 def parse_bindings(data):
@@ -60,6 +72,41 @@ def rows_to_records(kind, gender, rows):
     return out
 
 
+MIN_DECADE = 1800
+
+
+def rows_to_birth_records(kind, gender, rows):
+    # type: (str, Optional[str], List[dict]) -> List[dict]
+    """生年代の行を record に変換する。birth_year は年代の開始年、count はその年代の人数。"""
+    out = []
+    this_year = datetime.date.today().year
+    for rec, r in zip(rows_to_records(kind, gender, rows), rows):
+        try:
+            decade = int(float(r.get("decade", "")))
+        except ValueError:
+            continue
+        if decade < MIN_DECADE or decade > this_year:
+            continue
+        rec["birth_year"] = decade
+        out.append(rec)
+    return out
+
+
+def fetch_birth_decades(fetch=None):
+    # type: (object) -> List[dict]
+    records = []
+    for kind, classes in CLASSES.items():
+        for gender, qid in classes.items():
+            data = (fetch or sc.http_get)(
+                ENDPOINT, params={"query": build_birth_query(kind, qid)},
+                headers={"Accept": "application/sparql-results+json"})
+            rows = parse_bindings(data)
+            recs = rows_to_birth_records(kind, gender, rows)
+            print("生年代 %s/%s: %d 行 → %d レコード" % (kind, gender, len(rows), len(recs)))
+            records.extend(recs)
+    return records
+
+
 def fetch_all(fetch=None):
     # type: (object) -> List[dict]
     records = []
@@ -80,10 +127,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default=os.path.join(
         "qa", "sources", "wikidata-%s.jsonl" % datetime.date.today().isoformat()))
+    parser.add_argument("--birth-decades-out", default=None,
+                        help="指定すると、人物の生年代（10 年刻み）の集計も別ファイルに書く")
     args = parser.parse_args()
     records = fetch_all()
     sc.write_jsonl(args.out, records)
     print("書き込み: %s（%d 件）" % (args.out, len(records)))
+    if args.birth_decades_out:
+        births = fetch_birth_decades()
+        sc.write_jsonl(args.birth_decades_out, births)
+        print("書き込み: %s（%d 件）" % (args.birth_decades_out, len(births)))
     return 0
 
 

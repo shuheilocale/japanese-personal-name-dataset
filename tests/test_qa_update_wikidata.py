@@ -32,3 +32,30 @@ class TestRows:
         body = json.dumps({"results": {"bindings": [
             {"label": {"value": "博"}, "kana": {"value": "ひろし"}, "people": {"value": "3"}}]}})
         assert fw.parse_bindings(body.encode("utf-8")) == [{"label": "博", "kana": "ひろし", "people": "3"}]
+
+
+class TestBirthDecades:
+    def test_query_groups_by_decade(self):
+        q = fw.build_birth_query("given", "Q12308941")
+        assert "wdt:P569" in q and "wdt:P735" in q and "GROUP BY" in q and "?decade" in q
+
+    def test_rows_to_birth_records(self):
+        rows = [{"label": "博", "kana": "ひろし", "decade": "1940", "people": "12"},
+                {"label": "博", "kana": "ひろし", "decade": "1700", "people": "3"},   # 範囲外
+                {"label": "博", "kana": "ひろし", "decade": "x", "people": "3"}]      # 不正
+        recs = fw.rows_to_birth_records("given", "male", rows)
+        assert recs == [{"source": "wikidata", "kind": "given", "kanji": "博", "reading": "ひろし",
+                         "gender": "male", "count": 12, "birth_year": 1940}]
+
+    def test_fetch_birth_decades_uses_all_classes(self):
+        seen = []
+
+        def fake(url, params=None, headers=None):
+            seen.append(params["query"])
+            return json.dumps({"results": {"bindings": [
+                {"label": {"value": "博"}, "kana": {"value": "ひろし"},
+                 "decade": {"value": "1950"}, "people": {"value": "4"}}]}}).encode("utf-8")
+
+        recs = fw.fetch_birth_decades(fetch=fake)
+        assert len(seen) == 4 and len(recs) == 4
+        assert all(r["birth_year"] == 1950 for r in recs)

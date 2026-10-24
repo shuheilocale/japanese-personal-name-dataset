@@ -18,6 +18,16 @@ class TestParse:
         assert fn.parse_label("スミス, ジョン") is None
         assert fn.parse_label("山田, 太郎 (1950-)") is None
 
+    def test_birth_year(self):
+        assert fn.parse_birth_year("夏目, 漱石, 1867-1916") == 1867
+        assert fn.parse_birth_year("山田, 花子, 1950-") == 1950
+        assert fn.parse_birth_year("山田, 花子, 1930?-2001") == 1930
+        assert fn.parse_birth_year("内藤, 英憲") is None
+        assert fn.parse_birth_year("山田, 太郎, -1900") is None      # 没年のみ
+        assert fn.parse_birth_year("山田, 太郎, 生没年不詳") is None
+        assert fn.parse_birth_year("山田, 太郎, 1700-1750") is None   # 範囲外（1800 未満）
+        assert fn.parse_birth_year("山田, 太郎, 2999-") is None       # 未来
+
     def test_yomi(self):
         assert fn.parse_yomi("ナツメ, ソウセキ, 1867-1916") == ("なつめ", "そうせき")
         assert fn.parse_yomi("Natsume, Soseki") is None
@@ -32,9 +42,9 @@ class TestRecords:
         ]
         recs = fn.bindings_to_records(bindings)
         assert {"source": "ndl", "kind": "given", "kanji": "漱石", "reading": "そうせき",
-                "gender": None, "count": 1} in recs
+                "gender": None, "count": 1, "birth_year": 1867} in recs
         assert {"source": "ndl", "kind": "surname", "kanji": "夏目", "reading": "なつめ",
-                "gender": None, "count": 1} in recs
+                "gender": None, "count": 1, "birth_year": 1867} in recs
         assert len(recs) == 2
 
     def test_language_case_insensitive(self):

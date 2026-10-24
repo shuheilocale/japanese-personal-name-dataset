@@ -104,3 +104,8 @@ def test_cli_help_survives_non_utf8_stdout(script):
                             capture_output=True, env=env)
     assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
     assert "usage" in result.stdout.decode("utf-8", "replace")
+
+
+def test_record_birth_year_is_optional():
+    assert "birth_year" not in sc.record("ndl", "given", "愛", "あい")
+    assert sc.record("ndl", "given", "愛", "あい", birth_year=1950)["birth_year"] == 1950

@@ -9,6 +9,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import sys
 from typing import List, Optional, Tuple
 
@@ -47,6 +48,25 @@ def parse_label(label):
     return surname, given
 
 
+_BIRTH_RE = re.compile(r"^(\d{4})")
+MIN_BIRTH_YEAR = 1800
+
+
+def parse_birth_year(label):
+    # type: (str) -> Optional[int]
+    """「姓, 名, 生年-没年」の生年を返す。没年のみ・不詳・範囲外（1800 未満・未来）は None。"""
+    parts = _split(label)
+    if len(parts) < 3:
+        return None
+    m = _BIRTH_RE.match(parts[2])
+    if not m:
+        return None
+    year = int(m.group(1))
+    if year < MIN_BIRTH_YEAR or year > datetime.date.today().year:
+        return None
+    return year
+
+
 def parse_yomi(yomi):
     # type: (str) -> Optional[Tuple[str, str]]
     parts = _split(yomi)
@@ -69,8 +89,9 @@ def bindings_to_records(bindings):
         yomis = parse_yomi(b["yomi"]["value"])
         if not names or not yomis:
             continue
-        out.append(sc.record("ndl", "surname", names[0], yomis[0]))
-        out.append(sc.record("ndl", "given", names[1], yomis[1]))
+        born = parse_birth_year(b["label"]["value"])
+        out.append(sc.record("ndl", "surname", names[0], yomis[0], birth_year=born))
+        out.append(sc.record("ndl", "given", names[1], yomis[1], birth_year=born))
     return out
 
 

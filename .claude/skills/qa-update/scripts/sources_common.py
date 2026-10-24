@@ -44,16 +44,20 @@ def is_japanese_name_part(s):
     return bool(_NAME_PART_RE.match(s or ""))
 
 
-def record(source, kind, kanji, reading, gender=None, count=1):
-    # type: (str, str, str, str, Optional[str], int) -> dict
+def record(source, kind, kanji, reading, gender=None, count=1, birth_year=None):
+    # type: (str, str, str, str, Optional[str], int, Optional[int]) -> dict
     if kind not in KINDS:
         raise ValueError("kind は given|surname: %r" % kind)
     if gender is not None and gender not in GENDERS:
         raise ValueError("gender は male|female|unisex|None: %r" % gender)
     if not checks.HIRAGANA_RE.match(reading or ""):
         raise ValueError("reading はひらがなのみ: %r" % reading)
-    return {"source": source, "kind": kind, "kanji": kanji or "", "reading": reading,
-            "gender": gender, "count": int(count)}
+    rec = {"source": source, "kind": kind, "kanji": kanji or "", "reading": reading,
+           "gender": gender, "count": int(count)}
+    if birth_year is not None:
+        # 生年代メタデータ用（人物単位のレコードのみ。集約後のレコードには付けない）
+        rec["birth_year"] = int(birth_year)
+    return rec
 
 
 def write_jsonl(path, records):
