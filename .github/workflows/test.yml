@@ -23,7 +23,7 @@ jobs:
     - name: Validate dataset CSVs
       run: python3 .claude/skills/validate-dataset/scripts/validate.py
     - name: Install uv
-      uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
+      uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
       with:
         version: "0.13.5"
     - name: Type check (mypy)
@@ -47,7 +47,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Install uv
-      uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
+      uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
       with:
         version: "0.13.5"
 
