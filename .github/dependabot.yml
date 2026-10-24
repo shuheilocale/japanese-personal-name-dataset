@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # CI で使う GitHub Actions（コミット SHA で固定しているので、更新はこの PR で受ける）
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  # 開発用依存（pytest 等）。実行時依存は無い
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly

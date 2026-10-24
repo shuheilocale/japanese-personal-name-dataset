@@ -424,6 +424,27 @@ class TestHttp:
         finally:
             self._stop(srv)
 
+    def test_cross_site_post_is_rejected(self, tmp_path):
+        """CSRF: 外部ページからの simple request（text/plain）や外部 Origin は拒否する。"""
+        srv, p = self._start(tmp_path)
+        port = srv.server_address[1]
+        try:
+            status, _ = self._req(srv, "POST", "/api/decide", {"ids": ["a"], "status": "approved"},
+                                  {"Content-Type": "text/plain;charset=UTF-8"})
+            assert status == 415
+            status, _ = self._req(srv, "POST", "/api/decide", {"ids": ["a"], "status": "approved"},
+                                  {"Origin": "https://evil.example"})
+            assert status == 403
+            status, _ = self._req(srv, "POST", "/api/decide", {"ids": ["a"], "status": "approved"},
+                                  {"Origin": "null"})
+            assert status == 403
+            assert findings_io.load_findings(p)[0]["status"] == "pending"
+            status, _ = self._req(srv, "POST", "/api/decide", {"ids": ["a"], "status": "approved"},
+                                  {"Origin": "http://127.0.0.1:%d" % port})
+            assert status == 200
+        finally:
+            self._stop(srv)
+
     def test_concurrent_decides_both_saved(self, tmp_path):
         srv, p = self._start(tmp_path)
         results = {}

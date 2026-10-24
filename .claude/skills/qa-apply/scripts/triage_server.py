@@ -12,7 +12,7 @@ import threading
 import urllib.parse
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 sys.path.insert(0, os.path.abspath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
@@ -57,6 +57,20 @@ def host_allowed(host):
         if not port.isdigit():
             return False
     return h in ALLOWED_HOSTS
+
+
+def origin_allowed(origin):
+    # type: (Optional[str]) -> bool
+    """Origin ヘッダが無い（curl 等）か、http://127.0.0.1[:port] / http://localhost[:port] なら True。
+
+    ブラウザは別オリジンからの POST に必ず Origin を付けるので、外部ページからの CSRF を拒否できる
+    （Host ヘッダは攻撃ページ経由でも 127.0.0.1 になるため Host だけでは防げない）。"""
+    if origin is None:
+        return True
+    o = origin.strip().lower()
+    if not o.startswith("http://"):
+        return False
+    return host_allowed(o[len("http://"):])
 
 
 def _read_raw_lines(path):
@@ -290,6 +304,14 @@ def make_handler(state):
                 return
             if not host_allowed(self.headers.get("Host", "")):
                 self._send(403, {"error": "許可されていない Host ヘッダです"})
+                return
+            if not origin_allowed(self.headers.get("Origin")):
+                self._send(403, {"error": "許可されていない Origin です"})
+                return
+            ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            if ctype != "application/json":
+                # simple request（text/plain 等）を拒否して、ブラウザに CORS プリフライトを強制する
+                self._send(415, {"error": "Content-Type は application/json のみ受け付けます"})
                 return
             try:
                 length = int(self.headers.get("Content-Length", "0"))
