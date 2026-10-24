@@ -2,15 +2,61 @@
 
 import csv
 import os
-from typing import Dict, List, Tuple, Literal, Union
+from functools import lru_cache
+from typing import Dict, List, Literal, Tuple, TypedDict, Union, overload
 
 
-NameDict = Dict[str, Dict[str, any]]
-LastNameDict = Dict[str, Dict[str, any]]
+class FirstNameEntry(TypedDict):
+    """名の1エントリ（キーはひらがな読み）。"""
+
+    en: str
+    kanji: List[str]
+
+
+class LastNameEntry(TypedDict):
+    """姓の1エントリ（キーは漢字）。"""
+
+    reading: str
+    en: str
+    count: int
+
+
+Kind = Literal['org', 'opti']
+NameDict = Dict[str, FirstNameEntry]
+LastNameDict = Dict[str, LastNameEntry]
+
+
+@overload
+def load_dataset(
+    kind: Kind = ...,
+    include_last_names: Literal[False] = ...,
+) -> Tuple[NameDict, NameDict]: ...
+
+
+@overload
+def load_dataset(
+    kind: Kind,
+    include_last_names: Literal[True],
+) -> Tuple[NameDict, NameDict, LastNameDict]: ...
+
+
+@overload
+def load_dataset(
+    kind: Kind = ...,
+    *,
+    include_last_names: Literal[True],
+) -> Tuple[NameDict, NameDict, LastNameDict]: ...
+
+
+@overload
+def load_dataset(
+    kind: Kind = ...,
+    include_last_names: bool = ...,
+) -> Union[Tuple[NameDict, NameDict], Tuple[NameDict, NameDict, LastNameDict]]: ...
 
 
 def load_dataset(
-    kind: Literal['org', 'opti'] = 'org',
+    kind: Kind = 'org',
     include_last_names: bool = False
 ) -> Union[Tuple[NameDict, NameDict], Tuple[NameDict, NameDict, LastNameDict]]:
     """
@@ -94,6 +140,24 @@ def load_dataset(
     return man_names, woman_names
 
 
+def clear_cache() -> None:
+    """読み込み済み CSV のキャッシュを破棄する（次回の load_dataset で再読み込みする）。"""
+    _read_rows.cache_clear()
+
+
+@lru_cache(maxsize=None)
+def _read_rows(file_path: str) -> Tuple[Tuple[str, ...], ...]:
+    """CSV を不変なタプルとして読み込み、パスごとにキャッシュする。
+
+    呼び出し側には毎回新しい dict/list を組み立てて返すので、結果を書き換えても
+    キャッシュは汚れない。2 回目以降の load_dataset はファイルを開かない。
+    """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Dataset file not found: {file_path}")
+    with open(file_path, 'r', encoding='utf-8') as f:
+        return tuple(tuple(row) for row in csv.reader(f))
+
+
 def _load_first_names(file_path: str) -> NameDict:
     """
     Load first names from CSV file.
@@ -107,19 +171,14 @@ def _load_first_names(file_path: str) -> NameDict:
     Raises:
         FileNotFoundError: If the file does not exist.
     """
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"Dataset file not found: {file_path}")
-
-    names = {}
-    with open(file_path, 'r', encoding='utf-8') as f:
-        reader = csv.reader(f)
-        for row in reader:
-            if len(row) < 2:
-                continue  # Skip invalid rows
-            names[row[0]] = {
-                'en': row[1],
-                'kanji': row[2:] if len(row) > 2 else []
-            }
+    names: NameDict = {}
+    for row in _read_rows(file_path):
+        if len(row) < 2:
+            continue  # Skip invalid rows
+        names[row[0]] = {
+            'en': row[1],
+            'kanji': list(row[2:]),
+        }
     return names
 
 
@@ -136,20 +195,15 @@ def _load_last_names(file_path: str) -> LastNameDict:
     Raises:
         FileNotFoundError: If the file does not exist.
     """
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"Dataset file not found: {file_path}")
-
-    last_names = {}
-    with open(file_path, 'r', encoding='utf-8') as f:
-        reader = csv.reader(f)
-        for row in reader:
-            if len(row) < 4:
-                continue  # Skip invalid rows
-            last_names[row[0]] = {
-                'reading': row[2],
-                'en': row[3],
-                'count': int(row[1]) if row[1].isdigit() else 0
-            }
+    last_names: LastNameDict = {}
+    for row in _read_rows(file_path):
+        if len(row) < 4:
+            continue  # Skip invalid rows
+        last_names[row[0]] = {
+            'reading': row[2],
+            'en': row[3],
+            'count': int(row[1]) if row[1].isdigit() else 0,
+        }
     return last_names
 
 

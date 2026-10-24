@@ -54,7 +54,9 @@ python -m japanese_personal_name_dataset.core  # coreモジュールを直接実
 - **`api.py`**: パブリックAPIレイヤー - `load_dataset()` 関数を提供
 - **`core.py`**: コア実装 - CSVの読み込みとパース処理
 - **`helpers.py`**: ユーティリティ関数群 - `generate_random_name()`、`generate_random_full_name()`、`search_by_reading()`、`search_by_kanji()`、`search_last_name()`、`get_last_names()`、`get_popular_names()`、`is_valid_name()`、`get_readings_for_kanji()`
-- **`__init__.py`**: パッケージのエントリーポイント - `load_dataset` とヘルパー関数をエクスポート
+- **`__init__.py`**: パッケージのエントリーポイント - `load_dataset`・ヘルパー関数・型（`FirstNameEntry` / `LastNameEntry`）・`clear_cache()` をエクスポート。`__version__` はインストール済みメタデータから取得
+
+型ヒントは `TypedDict` と `overload`（`include_last_names` の値で戻り値の型が変わる）で付けており、`py.typed` を同梱している。CI の validate-dataset ジョブで mypy を実行する。CSV はパスごとに不変タプルでキャッシュし、`load_dataset()` は毎回新しい dict を返す
 
 ### データ読み込みフロー
 

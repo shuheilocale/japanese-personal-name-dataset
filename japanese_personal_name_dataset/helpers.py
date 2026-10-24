@@ -1,12 +1,12 @@
 """Helper utilities for Japanese personal name dataset."""
 
 import random
-from typing import List, Dict, Literal, Optional, Tuple, Union
+from typing import Any, List, Dict, Literal, Optional, Tuple, Union
 from .core import load_dataset, NameDict, LastNameDict
 
 
 # Cache for loaded datasets to avoid repeated file reads
-_CACHE = {}
+_CACHE: Dict[Tuple[str, bool], Any] = {}
 
 
 def _get_cached_dataset(kind: Literal['org', 'opti'] = 'org', include_last_names: bool = False):
@@ -97,7 +97,7 @@ def search_by_reading(
     gender: Optional[Literal['male', 'female']] = None,
     kind: Literal['org', 'opti'] = 'org',
     partial: bool = False
-) -> List[Dict[str, any]]:
+) -> List[Dict[str, Any]]:
     """
     Search names by hiragana reading.
 
@@ -145,7 +145,7 @@ def search_by_kanji(
     gender: Optional[Literal['male', 'female']] = None,
     kind: Literal['org', 'opti'] = 'org',
     partial: bool = False
-) -> List[Dict[str, any]]:
+) -> List[Dict[str, Any]]:
     """
     Search names by kanji.
 
@@ -194,7 +194,7 @@ def search_last_name(
     search_by: Literal['kanji', 'reading'] = 'kanji',
     partial: bool = False,
     limit: Optional[int] = None
-) -> List[Dict[str, any]]:
+) -> List[Dict[str, Any]]:
     """
     Search last names.
 
@@ -246,7 +246,7 @@ def search_last_name(
 def get_last_names(
     limit: Optional[int] = None,
     min_count: Optional[int] = None
-) -> List[Dict[str, any]]:
+) -> List[Dict[str, Any]]:
     """
     Get last names sorted by population count.
 
@@ -283,7 +283,7 @@ def get_last_names(
 def get_popular_names(
     gender: Literal['male', 'female'] = 'male',
     top: int = 50
-) -> List[Dict[str, any]]:
+) -> List[Dict[str, Any]]:
     """
     Get popular names from the optimized dataset.
 

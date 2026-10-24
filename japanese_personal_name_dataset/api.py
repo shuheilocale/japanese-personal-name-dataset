@@ -1,13 +1,44 @@
 """Public API for Japanese personal name dataset."""
 
-from typing import Literal
+from typing import Literal, Tuple, Union, overload
+
 from . import core
+from .core import Kind, LastNameDict, NameDict
+
+
+@overload
+def load_dataset(
+    kind: Kind = ...,
+    include_last_names: Literal[False] = ...,
+) -> Tuple[NameDict, NameDict]: ...
+
+
+@overload
+def load_dataset(
+    kind: Kind,
+    include_last_names: Literal[True],
+) -> Tuple[NameDict, NameDict, LastNameDict]: ...
+
+
+@overload
+def load_dataset(
+    kind: Kind = ...,
+    *,
+    include_last_names: Literal[True],
+) -> Tuple[NameDict, NameDict, LastNameDict]: ...
+
+
+@overload
+def load_dataset(
+    kind: Kind = ...,
+    include_last_names: bool = ...,
+) -> Union[Tuple[NameDict, NameDict], Tuple[NameDict, NameDict, LastNameDict]]: ...
 
 
 def load_dataset(
-    kind: Literal['org', 'opti'] = 'org',
+    kind: Kind = 'org',
     include_last_names: bool = False
-):
+) -> Union[Tuple[NameDict, NameDict], Tuple[NameDict, NameDict, LastNameDict]]:
     """
     Load Japanese personal name dataset.
 
