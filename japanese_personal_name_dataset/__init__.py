@@ -20,10 +20,8 @@ from .core import FirstNameEntry, LastNameEntry, NameDict, LastNameDict
 
 
 def _package_version() -> str:
-    try:
-        from importlib.metadata import PackageNotFoundError, version
-    except ImportError:  # pragma: no cover
-        return "0.0.0"
+    from importlib.metadata import PackageNotFoundError, version
+
     try:
         return version("japanese-personal-name-dataset")
     except PackageNotFoundError:  # pragma: no cover - ソースから直接 import した場合

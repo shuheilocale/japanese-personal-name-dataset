@@ -12,7 +12,7 @@ Thank you for helping improve the Japanese Personal Name Dataset. Issues and pul
 
 ## Development setup
 
-You need Python 3.8 or later and [uv](https://docs.astral.sh/uv/).
+You need Python 3.10 or later and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 git clone https://github.com/shuheilocale/japanese-personal-name-dataset.git
@@ -30,11 +30,11 @@ python3 .claude/skills/validate-dataset/scripts/validate.py  # dataset checks
 uvx mypy japanese_personal_name_dataset                    # type check
 ```
 
-CI runs the tests on Linux, macOS and Windows with Python 3.8 to 3.12.
+CI runs the tests on Linux, macOS and Windows with Python 3.10 to 3.14.
 
 ## Coding guidelines
 
-- **Python 3.8 compatible.** Do not use `X | Y` type unions, `match`, `list[int]` at runtime or other 3.9+ features.
+- **Python 3.10 compatible.** Do not use 3.11+ features such as `except*`, `tomllib`, `typing.Self`, `enum.StrEnum` or `datetime.UTC`.
 - **No runtime dependencies.** The package uses the standard library only.
 - **Type hints** on public functions. The package ships `py.typed`.
 - **Tests** for every behavior change, in `tests/`.

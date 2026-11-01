@@ -36,7 +36,7 @@ A dataset of Japanese personal names — first names and last names — with hir
 - **1,999 last names** with estimated population
 - Curated "optimized" subsets of popular names (702 male / 241 female)
 - Romaji in Hepburn romanization
-- Pure Python, no runtime dependencies, Python 3.8+
+- Pure Python, no runtime dependencies, Python 3.10+
 - Fully typed (`py.typed`), with results cached after the first load
 
 ## Installation

@@ -88,7 +88,7 @@ JSON / SQLite 版は `scripts/build_formats.py` が CSV（正本）と `qa/metad
 `.claude/settings.json` に以下のフックが設定されています：
 
 - **PreToolUse**: `dataset/` 配下の CSV への Edit/Write をブロック（データセット保護）。データ修正が必要な場合はユーザーの明示的な承認を得ること。
-- **PostToolUse**: `.py` ファイル編集後に vermin で Python 3.8 互換性を自動チェック（`X | Y` 型ヒント等の 3.9+ 構文を検出）。
+- **PostToolUse**: `.py` ファイル編集後に vermin で Python 3.10 互換性を自動チェック（`except*`・`tomllib` 等の 3.11+ 構文・API を検出）。対応版は 3.10〜3.14（v0.5.0 で 3.8/3.9 を終了）。
 
 ### データ品質保証（QA基盤）
 
@@ -97,4 +97,4 @@ JSON / SQLite 版は `scripts/build_formats.py` が CSV（正本）と `qa/metad
 - `/qa-apply`: 承認済み findings の一括適用（ユーザーの明示承認必須）。承認判断は `triage_server.py` のローカル UI で行う
 - `/qa-update`: 外部ソース（Wikidata・NDL典拠）からの年次更新。候補は add_row/add_kanji の findings として台帳に入る。設計書: `docs/superpowers/specs/2026-09-05-update-pipeline-design.md`
 - 設計書: `docs/superpowers/specs/2026-07-27-qa-foundation-design.md`
-- リリース前の互換性レビューは `py38-compat-reviewer` サブエージェントを使用
+- リリース前の互換性レビューは `py310-compat-reviewer` サブエージェントを使用
