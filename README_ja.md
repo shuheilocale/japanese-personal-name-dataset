@@ -14,7 +14,7 @@
 >>> from japanese_personal_name_dataset import load_dataset
 >>> man_names, woman_names = load_dataset()
 >>> man_names['たろう']
-{'en': 'tarou', 'kanji': ['多朗', '多郎', '太朗', '太郎', '大郎']}
+{'en': 'tarou', 'kanji': ['多朗', '多郎', '太朗', '太郎', '大郎', '太良']}
 ```
 
 ## 目次
@@ -32,7 +32,7 @@
 
 ## 特徴
 
-- 男性の名 **6,120 読み**・女性の名 **3,343 読み**。読みごとに知られている漢字表記をすべて収録
+- 男性の名 **8,520 読み**・女性の名 **3,542 読み**。読みごとに知られている漢字表記をすべて収録
 - 推定人数つきの姓 **1,999 種類**
 - 有名な名前だけを抜粋した「最適化版」（男性 702 / 女性 241）
 - ローマ字はヘボン式
@@ -123,9 +123,9 @@ CSV は `japanese_personal_name_dataset/dataset/` にあります（UTF-8、改�
 
 | ファイル | 内容 | 行数 |
 | --- | --- | --- |
-| `first_name_man_org.csv` | 男性の名 | 6,120 |
+| `first_name_man_org.csv` | 男性の名 | 8,520 |
 | `first_name_man_opti.csv` | 男性の名（最適化版） | 702 |
-| `first_name_woman_org.csv` | 女性の名 | 3,343 |
+| `first_name_woman_org.csv` | 女性の名 | 3,542 |
 | `first_name_woman_opti.csv` | 女性の名（最適化版） | 241 |
 | `last_name_org.csv` | 姓 | 1,999 |
 
@@ -149,9 +149,9 @@ CSV は `japanese_personal_name_dataset/dataset/` にあります（UTF-8、改�
 
 | ファイル | 平均 | 中央値 | 最大 |
 | --- | --- | --- | --- |
-| 男性（完全版） | 9 | 2 | 446 |
+| 男性（完全版） | 8 | 2 | 450 |
 | 男性（最適化版） | 45 | 26 | 446 |
-| 女性（完全版） | 11 | 2 | 394 |
+| 女性（完全版） | 11 | 2 | 398 |
 | 女性（最適化版） | 50 | 32 | 287 |
 
 ## JSON・SQLite 版

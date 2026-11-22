@@ -1,4 +1,4 @@
-{"fetched_at": "2026-09-06",
- "wikidata": {"records": 15610},
- "ndl": {"records": 209511, "prefix_len": 3, "raw_rows": 1489944, "duration_min": 840},
- "jmnedict": {"records": 325829, "version": "2026-09-06"}}
+{"fetched_at": "2026-10-24",
+ "wikidata": {"records": 15610, "fetched_at": "2026-09-06"},
+ "ndl": {"records": 215531, "prefix_len": 3, "raw_rows": 1547722, "fetched_at": "2026-10-24"},
+ "jmnedict": {"records": 325829, "version": "2026-09-06", "fetched_at": "2026-09-06"}}
