@@ -105,6 +105,17 @@ Wikidata（CC0）と国立国会図書館典拠（自由利用）から名の候
    `unknown` は追加されない。未処理・不正バッチが報告されたら、そのバッチだけ
    手順5をやり直して再マージする（同 id の finding は重複追加されない）。
 
+5.5. 以前の判断の引き継ぎ（手順5のマージ後、判断の前）:
+
+   ```bash
+   python3 $S/prior_decisions.py --findings qa/findings/<run-id>.jsonl \
+     --previous qa/findings/*-update.jsonl
+   ```
+
+   以前の更新ラウンドで却下した候補・行追加時に表記を絞って外した表記・表記の性別クラスが
+   追加先と矛盾する add_kanji を決定的に却下する（2026-11 では 16,594 候補のうち 1,991 件）。
+   以前の判断を引き継ぐので、毎回レビューに回るのは新しく現れた候補だけになる。
+
 6. 判断（トリアージ UI）:
 
    ```bash
@@ -120,6 +131,28 @@ Wikidata（CC0）と国立国会図書館典拠（自由利用）から名の候
    `entry_stale` / `value_not_in_row` / 別読み行の既存漢字（`dup_elsewhere`）は出ない
    （これらは remove_kanji 等の既存行向けシグナル）。事前承認済み（approved）は
    dry-run で内訳を確認するだけでよい。
+
+   件数が多くてサブエージェントにレビューさせた場合も、承認・却下は台帳の status に書き、
+   根拠（却下理由・表記の絞り込み）は evidence に追記する（`(却下: …)` / `(レビューで表記を絞り込み: 除外 …)`。
+   後者の書式は手順5.5の引き継ぎが読む）。2026-11 の盲検の再レビューでは、一次承認のうち再却下は
+   行追加 0.8%・漢字追加 1.9%。Sonnet / Haiku は漢字追加で却下すべき候補の 3〜4 割を通すので、レビューには使わない。
+
+6.5. 外国人名の音読みの除外（承認が済んだ後、適用の前）:
+
+   ```bash
+   python3 $S/foreign_names.py --findings qa/findings/<run-id>.jsonl \
+     --ndl-work qa/sources/ndl-work-<date> --list          # 確認だけ
+   python3 $S/foreign_names.py --findings qa/findings/<run-id>.jsonl \
+     --ndl-work qa/sources/ndl-work-<date> --apply
+   ```
+
+   NDL 典拠には中国・朝鮮の人名が音読みで入っている（張 憲文 → けんぶん）。その名を持つ人物の姓を
+   数え、中国・朝鮮系の 1 字姓の人物を除くと NDL の裏付けが 2 人未満になり Wikidata の裏付けもない表記を
+   不採用にする（2026-11 では承認済みのうち 81 件）。`--ndl-work` は人物単位の生データ（fetch_ndl.py の `--work`）。
+
+   索引の性別が female の add_row は辞書由来で当てにならず、男性表記が多く混じる（2026-11 では女性名ファイル向け
+   907 件中 708 件が却下）。却下理由が「男性名」のものは、男性名ファイルへの add_row として出し直して
+   レビューに回すとよい。
 
 7. 適用: `/qa-apply` の手順（dry-run → 明示承認 → ブランチ → 適用 → validate/pytest → 件数同期）。
 
@@ -158,4 +191,6 @@ kanji（候補漢字）と sources（NDL/Wikidata の人物数）を参考に、
   `qa/sources/manifest.json` のみ。
 - JMnedict 由来の漢字・読みを候補や evidence の値に転記しないこと（索引の ✓ 表示のみ）。
 - 候補の上限（既定 2000 件）を超えた分は次回に回る。閾値は `--min-ndl` / `--auto-ndl` で調整する。
+  2026-11 は `--max-candidates 100000` で持ち越しを消化した。手順5.5で以前の判断を引き継げば、
+  上限なしでもレビューに回る件数は新規分に限られる。
 - このスキルは dataset CSV を一切変更しない。修正の適用は `/qa-apply`。

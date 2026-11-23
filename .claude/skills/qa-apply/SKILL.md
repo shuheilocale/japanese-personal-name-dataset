@@ -55,6 +55,18 @@ python3 .claude/skills/qa-apply/scripts/rebase_findings.py \
 
 ## 手順
 
+0. 完全版（`*_org.csv`）と最適化版（`*_opti.csv`）の両方に remove_kanji / remove_row がある台帳
+   （/qa-review の結果）は、先に判断を揃える。レビューは両ファイルの行を別々に判定するので、同じ表記を
+   片方でだけ外す判断になりやすい（2026-11 では揃えの finding が 316 件）。揃えないと opti ⊆ org が崩れ、
+   validate が「org 版にない漢字」を警告する:
+   ```bash
+   python3 .claude/skills/qa-apply/scripts/sync_full_popular.py \
+     --findings qa/findings/<run-id>.jsonl \
+     --dataset-dir japanese_personal_name_dataset/dataset
+   ```
+   承認済みの判断を両ファイルの和集合として扱い、足した finding（cross_file_inconsistency、approved）は
+   適用予定にそのまま出る。再実行しても同じ結果になる。
+
 1. 対象の findings ファイルを確認し、dry-run で適用予定を提示する
    （`--from-report` はレポートのチェックで承認する場合のみ。UI で判断した場合は付けない）:
    ```bash
