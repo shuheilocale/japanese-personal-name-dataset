@@ -32,7 +32,7 @@ A dataset of Japanese personal names — first names and last names — with hir
 
 ## Features
 
-- **8,520 male** and **3,542 female** first-name readings, each with every known kanji spelling
+- **8,508 male** and **3,537 female** first-name readings, each with every known kanji spelling
 - **1,999 last names** with estimated population
 - Curated "optimized" subsets of popular names (702 male / 241 female)
 - Romaji in Hepburn romanization
@@ -129,9 +129,9 @@ The CSV files live in `japanese_personal_name_dataset/dataset/` (UTF-8, LF line 
 
 | File | Contents | Rows |
 | --- | --- | --- |
-| `first_name_man_org.csv` | Male first names | 8,520 |
+| `first_name_man_org.csv` | Male first names | 8,508 |
 | `first_name_man_opti.csv` | Male first names, popular subset | 702 |
-| `first_name_woman_org.csv` | Female first names | 3,542 |
+| `first_name_woman_org.csv` | Female first names | 3,537 |
 | `first_name_woman_opti.csv` | Female first names, popular subset | 241 |
 | `last_name_org.csv` | Last names | 1,999 |
 
@@ -155,10 +155,10 @@ The CSV files live in `japanese_personal_name_dataset/dataset/` (UTF-8, LF line 
 
 | File | Mean | Median | Max |
 | --- | --- | --- | --- |
-| Male (full) | 8 | 2 | 450 |
-| Male (popular) | 45 | 26 | 446 |
-| Female (full) | 11 | 2 | 398 |
-| Female (popular) | 50 | 32 | 287 |
+| Male (full) | 8 | 2 | 436 |
+| Male (popular) | 44 | 26 | 425 |
+| Female (full) | 10 | 2 | 384 |
+| Female (popular) | 48 | 30 | 274 |
 
 ## JSON and SQLite downloads
 
